@@ -1,6 +1,11 @@
 local ffi = require("ffi")
 local module_addons = require("addons")
 
+-- TODO: Create networking:: We need to get started on this since this is one of the things I have no clue how to setup
+-- The most important thing I do know is that I need to keep ALL server code in a managable area so that I can make a dedicated
+-- version that can run on it's own without depending on the renderer or any bloat
+-- basically skeletonise the networking, tick, think, send message, receive message... etc.
+
 local vr_enabled = false
 
 local blur_shader = [[
@@ -96,7 +101,7 @@ function lovr.load()
 	-- BUT the point is I made unification of the context of lua
 	
 	-- YAY it works!
-	print( ts_table.loadLevel( "addons/timesplitters/level2.raw" ) )
+	print( ts_table.loadLevel( "addons/timesplitters/levels/level21.raw" ) )
 	-- Like get levelFile(3) will return a mesh
 	
 	-- Things like running over every addon from the addon count and calling each of their functions that returns a function
