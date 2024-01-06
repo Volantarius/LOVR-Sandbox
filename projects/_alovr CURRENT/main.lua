@@ -93,19 +93,24 @@ function lovr.load()
 	
 	-- Initialize as if the addon is for development
 	local ts_index = module_addons.checkAddon( "timesplitters" )-- Because we can call for a name instead of literally writing it IN CODE
-	local ts_table = module_addons.getAddonTable( ts_index )
 	
-	-- Volantarius: This makes it so I can prototype invokations instead of seperating the files or namespace
-	-- Users can create addons that the engine would have to be modified in order to run maliciously if it really was backwards??
-	-- Actually YES all of lovr context would be available, but then again all code is kind of available in some way
-	-- BUT the point is I made unification of the context of lua
-	
-	-- YAY it works!
-	print( ts_table.loadLevel( "addons/timesplitters/levels/level21.raw" ) )
-	-- Like get levelFile(3) will return a mesh
-	
-	-- Things like running over every addon from the addon count and calling each of their functions that returns a function
-	-- This makes addon prototyping extremely easy and can make many addons, like entities, drawable objects, math, what not
+	-- For the engine side using a string check for our project addon we can make sure we can
+	-- fail safely and continue running the game without having to crash and stuff
+	if ( ts_index ~= nil ) then
+		local ts_table = module_addons.getAddonTable( ts_index )
+		
+		-- Volantarius: This makes it so I can prototype invokations instead of seperating the files or namespace
+		-- Users can create addons that the engine would have to be modified in order to run maliciously if it really was backwards??
+		-- Actually YES all of lovr context would be available, but then again all code is kind of available in some way
+		-- BUT the point is I made unification of the context of lua
+		
+		-- YAY it works!
+		print( ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" ) )
+		-- Like get levelFile(3) will return a mesh
+		
+		-- Things like running over every addon from the addon count and calling each of their functions that returns a function
+		-- This makes addon prototyping extremely easy and can make many addons, like entities, drawable objects, math, what not
+	end
 end
 
 -- main MAIN

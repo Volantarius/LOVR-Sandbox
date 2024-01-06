@@ -35,50 +35,79 @@ function ts.loadTexture( file ) end
 -- 
 -- DRAWING, we are called for the draw. We must invert that meaning when we want to draw at different positions of said ENTITY
 -- 
+
+-- 
+-- This is a complex mesh format that is not an indexed list of triangles
+-- This uses groups of strips for it's textures and splitting geometry
+-- The way it is read in memory is pretty linear and straight forward when looked in a hex editor
+-- 
 local file_index = 0
 
 -- Actually fill this completely out for all meshes
-function generatePrimaryMesh( primary_groups )
-	local strip_index = 0
-	local new_vert_index = 0
+function generateMesh( blob_file, final_vert_count, groups, group_size, input_address )
+	-- blob_file
+	-- primary_groups
+	-- primary_group_size
+	-- room_primary
+	-- 
 	
-	--local groups_count = primary_group_size
+	-- Initialize the array buffer
+	local elements = {}-- make this init a table of size final_vert_count
+	local element_size = final_vert_count
 	
-	for group_index = 0, primary_group_size do
-		file_index = primary_groups + (group_index * 24)-- 6 * 4
+	local file_index = 0
+	
+	-- Start creating a mesh
+	if ( groups > 0 ) then
+		-- MOVED
+		local strip_index = 0
+		local new_vert_index = 0
 		
-		--local current_group = groups[group_index]
+		-- room struct
+		local groups_count = primary_group_size
 		
-		local material_id = blob_file:getU32(file_index, 1)
-		file_index = file_index + 4
-		file_index = file_index + 4 -- Strip unknown
-		local group_strips_count = blob_file:getU32(file_index, 1)
-		file_index = file_index + 4
-		local group_vertices_start = blob_file:getU32(file_index, 1)
-		file_index = file_index + 4
-		--local group_vertices_end = blob_file:getU32(file_index, 1)
-		-- Another unknown? Can't remember
-		
-		-- Start where the vertices start
-		local offset = group_vertices_start * 1
-		
-		for k = 0, group_strips_count do
-			local strip = surfaces[strip_index]
+		for group_index = 0, primary_group_size do
+			file_index = primary_groups + (group_index * 24)-- 6 * 4
 			
-			local strip_vert_count = --something
+			-- room struct
+			--local current_group = groups[group_index]
 			
-			for vert_index = 0, strip_vert_count do
-				--local element = elements[new_vert_index]
+			local material_id = blob_file:getU32(file_index, 1)
+			file_index = file_index + 4
+			file_index = file_index + 4 -- Strip unknown
+			local group_strips_count = blob_file:getU32(file_index, 1)
+			file_index = file_index + 4
+			local group_vertices_start = blob_file:getU32(file_index, 1)
+			file_index = file_index + 4
+			--local group_vertices_end = blob_file:getU32(file_index, 1)
+			-- Another unknown? Can't remember
+			
+			-- room struct
+			--strips_count = group_strips_count
+			
+			-- Start where the vertices start
+			local offset = group_vertices_start * 1
+			
+			for k = 0, group_strips_count do
+				-- room struct
+				--local strip = surfaces[strip_index]
 				
-				--fill_element()
+				-- room struct
+				--local strip_vert_count = strip->vert_count
 				
-				-- ahh it's a lot of code to read vertices and fill tables..!!
+				for vert_index = 0, strip_vert_count do
+					--local element = elements[new_vert_index]
+					
+					--fill_element()
+					
+					-- ahh it's a lot of code to read vertices and fill tables..!!
+					
+					new_vert_index = new_vert_index + 1
+				end
 				
-				new_vert_index = new_vert_index + 1
+				offset = offset + strip_vert_count
+				strip_index = strip_index + 1
 			end
-			
-			offset = offset + strip_vert_count
-			strip_index = strip_index + 1
 		end
 	end
 end
@@ -107,10 +136,16 @@ function ts.loadLevel( file )
 		local block_rooms = blob_file:getU32(4, 1)
 		local block_areaportals = blob_file:getU32(8, 1)
 		
+		print( block_materials, block_rooms, block_areaportals )
+		
+		file_index = file_index + 8
+		
 		-- We can use the multiple of 8 from a byte to calculate hard counts of each struct based off what was found through reverse engineering
 		-- The storage format for this model aligns to every 4 bytes, so we can easily calculate the size of each list
 		local material_count = (block_rooms - block_materials) / 16
 		local room_count = math.floor( ((block_areaportals - block_rooms) / 4 / 11) - 1 )
+		
+		print( block_materials, block_rooms, block_areaportals )
 		
 		-- Should be 90 and 53
 		-- LOL the room count is really weird, VERIFY the room count since there is a bug when loading chinese
@@ -119,7 +154,10 @@ function ts.loadLevel( file )
 		-- //// Textures ////
 		file_index = block_materials * 1
 		
-		for material_index = 0, material_count - 1 do
+		-- IN Cpp this for loop is 0 to 38
+		-- IN Lua this for loop is 0 to 39 () : 0 to (x - 1)
+		-- WOW in lua 1 to (x - 1)
+		for material_index = 1, (material_count - 1) do
 			local texture_index = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
 			
@@ -134,71 +172,67 @@ function ts.loadLevel( file )
 			-- And texture name
 		end
 		
-		local room_information = {}
+		-- Using tables because they are basically structs without names
+		local rooms_room = {}
 		
 		-- //// Meshes ////
-		-- We start with one
-		for room_index = 1, room_count do
+		-- We start with one and (room_count - 1)
+		for room_index = 1, (room_count - 1) do
 			-- Setup an array that we can store all the values in to make transfers easy
 			local room_data = {}
+			local room_primary = {}
+			local room_secondary = {}
 			
-			file_index = block_rooms + (room_index * 4 * 11)
+			file_index = (1 * block_rooms) + (room_index * 4 * 11)
 			
 			file_index = file_index + 20-- 4 * 5
 			
-			--local room_bounds_min_x = blob_file:getF32(file_index, 1)
-			table.insert( room_data, blob_file:getF32(file_index, 1) )
+			local room_bounds_min_x = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local room_bounds_min_y = blob_file:getF32(file_index, 1)
-			table.insert( room_data, blob_file:getF32(file_index, 1) )
+			local room_bounds_min_y = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local room_bounds_min_z = blob_file:getF32(file_index, 1)
-			table.insert( room_data, blob_file:getF32(file_index, 1) )
+			local room_bounds_min_z = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local room_bounds_max_x = blob_file:getF32(file_index, 1)
-			table.insert( room_data, blob_file:getF32(file_index, 1) )
+			local room_bounds_max_x = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local room_bounds_max_y = blob_file:getF32(file_index, 1)
-			table.insert( room_data, blob_file:getF32(file_index, 1) )
+			local room_bounds_max_y = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local room_bounds_max_z = blob_file:getF32(file_index, 1)
-			table.insert( room_data, blob_file:getF32(file_index, 1) )
+			local room_bounds_max_z = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
 			-- First mesh is the primary opaque mesh format
 			-- We use the very top of the rooms address and cycle through getting the mesh addresses
-			local address_mesh = blob_file:getU32(block_rooms + (4 * 11 * room_index), 1)
-			
-			table.insert( room_data, address_mesh )
+			local address_mesh = blob_file:getU32(block_rooms + math.floor(4 * 11 * room_index), 1)
 			
 			--file_index = address_mesh - 10-- Weird U32 number
 			
 			-- Primary mesh info address
-			file_index = file_index - 8 - 64
+			file_index = address_mesh - 8 - 64
 			
-			--local primary_groups = blob_file:getU32(file_index, 1)
-			table.insert( room_data, blob_file:getU32(file_index, 1) )
+			local primary_groups = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local secondary_groups = blob_file:getU32(file_index, 1)
-			table.insert( room_data, blob_file:getU32(file_index, 1) )
+			local secondary_groups = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
 			
-			--local unknown_info = blob_file:getU32(file_index, 1)
-			table.insert( room_data, blob_file:getU32(file_index, 1) )
+			local unknown_info = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
 			
+			-- PRIMARY
 			local primary_strips = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
+			
 			local primary_verts = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
+			
 			local primary_uvs = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
+			
 			local primary_colors = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
 			
@@ -206,82 +240,109 @@ function ts.loadLevel( file )
 			
 			local secondary_strips = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
+			
 			local secondary_verts = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
+			
 			local secondary_uvs = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
+			
 			local secondary_colors = blob_file:getU32(file_index, 1)
 			file_index = file_index + 4
 			
-			local primary_vert_count = (primary_groups - primary_colors) / 4
+			--[[
+				Volantarius
+				
+				The addresses are in order from top to bottom in a hex editor
+				so from groups to colors is a section of 4 bytes containing the values for number of vertices
+				The number of vertices is where we then use a address offset lower in the binary to then read
+				the values from, this is far later in the code though
+			]]
+			local primary_vert_count   = (primary_groups - primary_colors) / 4
 			local secondary_vert_count = (secondary_groups - secondary_colors) / 4
 			
-			local primary_strip_size = (primary_verts - primary_strips) / 16
+			local primary_strip_size   = (primary_verts - primary_strips) / 16
 			local secondary_strip_size = (secondary_verts - secondary_strips) / 16
 			
+			-- I think I should add a assert to make sure these values never have decimals
+			-- If there is a decimal the data is incorrect always, the math above must be correct though
+			-- It has a lot of benefits to use a structure like this to hold this kind of data
+			
 			local address_mesh_terminator = address_mesh - 8 - 64 - 8
+			
+			--print("address mesh", primary_vert_count, primary_strip_size)
 			
 			-- //// Groups ////
 			
 			local primary_group_size = 0
 			local secondary_group_size = 0
 			
-			-- There can be additional information for a mesh, so we just adjust the calculation if so
 			if ( primary_groups > 0 ) then
 				primary_group_size = address_mesh_terminator - primary_groups
 				
 				if ( secondary_strips > 0 ) then
+					
 					primary_group_size = secondary_strips - primary_groups
-				elseif ( unknown_info ) then
+					
+				elseif ( unknown_info > 0 ) then
+					
 					primary_group_size = unknown_info - primary_groups
+					
 				end
 				
-				primary_group_size = primary_group_size / 24
+				primary_group_size = math.floor(primary_group_size / 24)
 				
 				primary_group_size = primary_group_size - 1
 				
-				-- then we setup information to fill in cpp using structs.. so we gotta do something else here
-				-- array[primary_group_size]
+				--print("RI", room_index, primary_group_size)
 			end
 			
-			if ( secondary_groups > 0 ) then
-				secondary_group_size = address_mesh_terminator - secondary_groups
-				
-				if ( unknown_info > 0 ) then
-					secondary_group_size = unknown_info - secondary_groups
-				end
-				
-				secondary_group_size = secondary_group_size / 24
-				
-				secondary_group_size = secondary_group_size - 1
-			end
+			-- TODO: Secondary groups
+			
+			-- THEN for the generate mesh, WE will just use a table to stack all the info in
+			-- where then the mesh generator will read those addresses and start reading the mesh data
 			
 			local final_vert_count = 0
 			
 			if ( primary_strips > 0 ) then
-				for i = 0, primary_strip_size do
-					file_index = primary_strips + (i * 16)-- 4 * 4
+				local room_surfaces = {}
+				for i = 1, primary_strip_size do room_surfaces[i] = {} end
+				
+				for i = 1, primary_strip_size do
+					-- lua: indexs start at 1, so for loops naturally are <=
+					file_index = primary_strips + ((i - 1) * 16)
 					
-					--local strip = surfaces[i]
+					local vert_count = blob_file:getU8(file_index, 1)
+					file_index = file_index + 1
 					
-					-- Bytes!
-					local vert_count = blob_file:getU4(file_index, 1)
+					local flags_a = blob_file:getU8(file_index, 1)
 					file_index = file_index + 1
-					local flags_a = blob_file:getU4(file_index, 1)
+					
+					local flags_b = blob_file:getU8(file_index, 1)
 					file_index = file_index + 1
-					local flags_b = blob_file:getU4(file_index, 1)
-					file_index = file_index + 1
+					
+					print("strip index", i, vert_count, flags_a, flags_b)
+					
+					-- store the strip as a table ("it's a struct in memory")
+					room_surfaces[i] = {vert_count, flags_a, flags_b}
 					
 					final_vert_count = final_vert_count + vert_count
 				end
 				
-				--local elements = final_vert_count
-				--local element_size = final_vert_count
+				-- Setup our arrays for the mesh
+				-- Store it as you wish and then we can translate
+				-- it with the shader or the engine's mesh generate code
+				local mesh_element = {}
+				for i = 1, final_vert_count do mesh_element[i] = {} end
 				
-				-- Start creating a mesh
-				if ( primary_groups > 0 ) then
-					-- MOVED
-				end
+				
+			else
+				-- warning and halt
+				-- for debugging to find a mesh that does have only transparent meshes
+				-- If this is a break point we can start to look at the hex of the mesh to setup any of its cases
+				assert(false, "mesh with no primary mesh! that or wrong file type bro")
+				
+				-- CLEAN UP: make this silently fail instead of breaking lua
 			end
 		end
 		
