@@ -4,6 +4,9 @@
 	We'll it tis a simple language that when you understand how variables and tables are
 	stored on a computer, this language can be used to do many tasks with very simple bytecode translation
 	
+	FAQS
+	
+	Lua does not have a hard type for it's numbers but should treat each number as a float
 ]]
 
 --[[
@@ -39,9 +42,10 @@
 		// Returns 1 to 39
 	}
 	
-	Do you see the difference? in Lua the for loop stops on 40 and not less than it.
+	Do you see the difference? in Lua the for loop stops on 40 and not "less than".
 	
-	Lua does not have a hard type for it's numbers but should treat each number as a float
+	Once you have this down and remember it you can translate written loops in a script
+	to lua without having to compute a new script
 ]]
 
 --[[

@@ -65,9 +65,29 @@ local tempTexture, clamper, screen_shader, screen_shader_two
 -- texture system :: use strings to index textures! 8bit is fine like how it is in lua the lookup can be made faster as well
 g_textures = {}
 
+local import_test = false
+local import_test_groups = {}
+
 function lovr.load()
 	local width, height = lovr.headset.getDisplayDimensions()
 	local layers = lovr.headset.getViewCount()
+	
+	test_game_shader = lovr.graphics.newShader([[
+		layout(set = 2, binding = 0) uniform Colors {
+			vec4 colors[100];
+		};
+		
+		vec4 lovrmain() {
+			
+			return DefaultPosition;
+		}
+	]],[[
+		
+		vec4 lovrmain() {
+			
+			return DefaultColor;
+		}
+	]])
 	
 	screen_shader = lovr.graphics.newShader("fill", blur_shader)
 	
@@ -104,8 +124,17 @@ function lovr.load()
 		-- Actually YES all of lovr context would be available, but then again all code is kind of available in some way
 		-- BUT the point is I made unification of the context of lua
 		
+		import_test = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
+		
+		-- okay yes there are groups
+		-- YAY our groups work, so we have the material ID now
+		for group_index = 1, #import_test[2] do
+			print(group_index, import_test[2][group_index][2], import_test[2][group_index][3], #import_test[2][1])
+		end
+		
+		
 		-- YAY it works!
-		print( ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" ) )
+		print( import_test )
 		-- Like get levelFile(3) will return a mesh
 		
 		-- Things like running over every addon from the addon count and calling each of their functions that returns a function
@@ -222,10 +251,39 @@ function runExampleScene( pass )
 	pass:setColor(1.0, 0.95, 0.0)
 	pass:cube(0, 1.7, -1.0, 0.5, time_now, 0, 1, 0, "line")
 	pass:setColor(1, 1, 1)
+	
+	if ( import_test ) then
+		
+		--pass:setShader(test_game_shader)
+		--pass:setDrawMode("triangles")
+		
+		--pass:draw(import_test, 0, 0, 0)
+		
+		--for group_index = 1, #import_test[2] do
+			--print(group_index, import_test[2][1][1], #import_test[2][1])
+		--	pass:setMaterial( g_textures[1] )
+		---	pass:mesh( import_test[1], lovr.math.mat4(), import_test[2][group_index][3], import_test[2][group_index][2], 1 )
+		--end
+		
+		--pass:mesh(import_test)
+		--pass:setShader()
+		
+	end
+end
+
+function lovr.draw(pass)
+	pass:skybox(g_textures[2])
+	
+	-- //////////////////////////////////////////////////////////////////////////////
+	--pass:push("state")
+	
+	-- DRAW SCENE HERE
+	runExampleScene( pass )
 end
 
 -- We got pass:push and pass:pop!
-function lovr.draw(pass)
+--function lovr.draw(pass)
+function lovr.draw_ASD(pass)
 	time_last = time_now
 	time_now = lovr.headset.getTime()
 	
