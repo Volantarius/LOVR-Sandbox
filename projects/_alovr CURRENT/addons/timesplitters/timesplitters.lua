@@ -260,7 +260,12 @@ function generateMesh( blob_file, final_vert_count, room_surfaces, address_mesh,
 	
 	-- OKAY so here we need to create a buffer that uses our format
 	
-	local temp_buffer = lovr.graphics.newBuffer({{ name = "VertexPostion", type = "vec3" }, { name = "VertexNormal", type = "vec3" }, { name = "VertexUV", type = "vec2" }}, mesh_element)
+	-- May have to use the LOVR built in types instead of tables
+	--local temp_buffer = lovr.graphics.newBuffer({{ name = "VertexPostion", type = "vec3" }, { name = "VertexNormal", type = "vec3" }, { name = "VertexUV", type = "vec2" }}, mesh_element)
+	local temp_buffer = lovr.graphics.newBuffer({{ name = "VertexPostion", type = "vec3" }, { name = "VertexNormal", type = "vec3" }, { name = "VertexUV", type = "vec2" }}, final_vert_count)
+	
+	temp_buffer:setData( mesh_element )
+	-- Not the correct kind of buffer lol
 	
 	-- Ah crap we need to pass the groups down to the render buffer
 	--return mesh_element, groups_primary
@@ -507,23 +512,26 @@ function ts.loadLevel( file )
 			-- I originally determined Timeplitters to use GL for it's graphics and it is true
 			-- that it's raw format for levels are in a 3 floats per position and so on
 			-- Setup an array that we can store all the values in to make transfers easy
+			
 			--local room_data = {room_bounds_min_x,room_bounds_min_y,room_bounds_min_z,room_bounds_max_x,room_bounds_max_y,room_bounds_max_z,address_mesh,unknown_info}
+			
 			local room_primary = {primary_groups,primary_strips,primary_verts,primary_uvs,primary_colors, primary_group_size}
 			local room_secondary = {secondary_groups,secondary_strips,secondary_verts,secondary_uvs,secondary_colors, secondary_group_size}
 			
-			--rooms_room[room_index] = {room_data, room_primary, room_secondary}
-			rooms_room[room_index] = {room_primary, room_secondary}
+			local pass_to_mesh_maker = {room_primary, room_secondary}
 			
 			-- Generate a mesh via addresses and we can hallucinate a table we need for our openGL context
-			local mesh_data, mesh_groups = generateMesh( blob_file, final_vert_count, room_surfaces, address_mesh, rooms_room[room_index] )
+			local mesh_data, mesh_groups = generateMesh( blob_file, final_vert_count, room_surfaces, address_mesh, pass_to_mesh_maker )
 			
-			rooms_mesh[room_index] = {mesh_data, mesh_groups}
-			-- So the mesh data is {{{position, 3}, {uv, 2}, {color, 4}}, ...}
+			--table.insert(rooms_room, mesh_data)
+			--table.insert(rooms_room, mesh_groups)
+			
+			rooms_room[room_index] = {primary_group_size, secondary_group_size, mesh_data, mesh_groups, room_surfaces}
 		end
 		
 		-- now rooms_mesh is a complete list of meshs that can be translated
 		
-		local test_first_room = rooms_mesh[1]
+		local test_first_room = rooms_room[1]
 		
 		local format_test_first_room = {
 			{"VertexPosition", "vec3"},
@@ -547,20 +555,6 @@ function ts.loadLevel( file )
 	
 	-- TODO
 	return final_mesh
-end
-
---[[
-	TODO: Make this creation shared between our actual mesh and buffer so that we can always change this and use the same structure
-]]
-function ts.createIndexBuffer()
-	local buffer = lovr.graphics.newBuffer({
-		{ name = "VertexPosition", type = "vec3" },
-		{ name = "VertexNormal", type = "vec3" },
-		{ name = "VertexUV", type = "vec2" },
-		{ name = "VertexColor", type = "vec4" }
-	}, 4)
-	
-	return buffer
 end
 
 --[[

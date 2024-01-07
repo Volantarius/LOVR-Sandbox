@@ -126,12 +126,53 @@ function lovr.load()
 		
 		import_test = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
 		
-		-- okay yes there are groups
-		-- YAY our groups work, so we have the material ID now
-		for group_index = 1, #import_test[2] do
-			print(group_index, import_test[2][group_index][2], import_test[2][group_index][3], #import_test[2][1])
-		end
+		--[[
+		local room_data = {
+			room_bounds_min_x,room_bounds_min_y,room_bounds_min_z,
+			room_bounds_max_x,room_bounds_max_y,room_bounds_max_z,
+			address_mesh,unknown_info
+		}
 		
+		local room_primary = {
+			1 primary_groups,
+			2 primary_strips,
+			3 primary_verts,
+			4 primary_uvs,
+			5 primary_colors,
+			6 primary_group_size
+		}
+		
+		rooms_room[room_index] = {primary_group_size, secondary_group_size, mesh_data, mesh_groups, room_surfaces}
+		
+		MESH GROUPS FORMAT
+		groups_primary[group_index] = {material_id, group_strips_count, group_vertices_start}
+		
+		room_surfaces[i] = {vert_count, flags_a, flags_b}
+		]]
+		
+		if ( import_test ) then
+			local groups_count = import_test[1]
+			
+			local surface_count = 0
+			local vertice_count = 0
+			
+			for group_index = 1, groups_count do
+				local current_group = import_test[4][group_index]
+				
+				--print(group_index, group_current[2], group_current[3], #import_test[2][1])
+				--print(group_index, current_group[1], current_group[2], current_group[3])
+				
+				for surface_index = 1, current_group[2] do
+					local current_surface = import_test[5][surface_count + surface_index]
+					
+					-- Draw the buffer from vertice_count to vert_count(current_surface[1])
+					
+					vertice_count = vertice_count + current_surface[1]
+				end
+				
+				surface_count = surface_count + current_group[2]
+			end
+		end
 		
 		-- YAY it works!
 		print( import_test )
@@ -252,22 +293,49 @@ function runExampleScene( pass )
 	pass:cube(0, 1.7, -1.0, 0.5, time_now, 0, 1, 0, "line")
 	pass:setColor(1, 1, 1)
 	
-	if ( import_test ) then
-		
+	--if ( import_test ) then
 		--pass:setShader(test_game_shader)
 		--pass:setDrawMode("triangles")
 		
 		--pass:draw(import_test, 0, 0, 0)
 		
 		--for group_index = 1, #import_test[2] do
-			--print(group_index, import_test[2][1][1], #import_test[2][1])
+		--	local group_current = import_test[2][group_index]
+			
 		--	pass:setMaterial( g_textures[1] )
 		---	pass:mesh( import_test[1], lovr.math.mat4(), import_test[2][group_index][3], import_test[2][group_index][2], 1 )
 		--end
 		
 		--pass:mesh(import_test)
 		--pass:setShader()
+	--end
+	
+	if ( import_test ) then
+		local groups_count = import_test[1]
 		
+		local surface_count = 0
+		local vertice_count = 0
+		
+		for group_index = 1, groups_count do
+			local current_group = import_test[4][group_index]
+			
+			for surface_index = 1, current_group[2] do
+				local current_surface = import_test[5][surface_count + surface_index]
+				
+				pass:setWireframe(true)
+				pass:setCullMode("none")
+				pass:setDepthWrite(true)
+				pass:setMeshMode("triangles")
+				pass:setViewCull(false)
+				pass:setWinding("clockwise")
+				-- Draw the buffer from vertice_count to vert_count(current_surface[1])
+				pass:mesh( import_test[3], lovr.math.mat4(), vertice_count, current_surface[1], 1 )
+				
+				vertice_count = vertice_count + current_surface[1]
+			end
+			
+			surface_count = surface_count + current_group[2]
+		end
 	end
 end
 
