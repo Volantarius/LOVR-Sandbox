@@ -1,8 +1,5 @@
 local ts = {}
 
--- lovr.filesystem.read( filename, bytes )
--- 
-
 --[[local normal = lovr.math.newVec3(0, 1, 0)
 					
 					local ind_a = 0
@@ -63,7 +60,113 @@ local ts = {}
 
 function ts.loadPak( file ) end
 
-function ts.loadTexture( file ) end
+-- Blob file
+-- endChar number
+-- Returns string and amount of bytes read
+local function readUntilTerminate( blob, offset, endChar )
+	local string_temp = {}
+	local read_count = 0
+	
+	local final = ""
+	
+	for i = 0, 16 do
+		-- Read bytes as unsigned and convert to ascii with string.char
+		-- then we can either create a string with ..
+		-- or insert into our table and parse it later
+		local char = blob:getU8( offset + i, 1 )
+		
+		-- We always want to default to newline or null character to terminate
+		if ( char == 0x0A or char == endChar ) then
+			final = string.char( unpack( string_temp ) )
+			
+			read_count = i + 1
+			
+			break
+		end
+		
+		table.insert( string_temp, char )
+	end
+	
+	return final, read_count
+end
+
+-- Assumes bytes are ascii
+-- Basically subtract the byte by 48
+local function readUntilTerminateNumerical( blob, offset, endChar )
+	local digits = {}
+	local digits_count = 0
+	local read_count = 0
+	
+	local final = 0
+	
+	-- LOL I always end up with two loops...
+	-- Terminated strings are always a mystery to me lol
+	
+	for i = 0, 16 do
+		-- Read bytes as unsigned and convert to ascii with string.char
+		-- then we can either create a string with ..
+		-- or insert into our table and parse it later
+		local char = blob:getU8( offset + i, 1 )
+		
+		-- We always want to default to newline or null character to terminate
+		if ( char == 0x0A or char == endChar ) then
+			read_count = i + 1
+			
+			digits_count = #digits
+			
+			break
+		end
+		
+		table.insert( digits, char - 48 )
+	end
+	
+	local place = 1
+	
+	for i = 1, digits_count do
+		-- Like in math class
+		final = final + (place * digits[digits_count - i + 1])
+		
+		place = place * 10
+	end
+	
+	return final, read_count
+end
+
+function ts.loadTexture( file )
+	local is_valid = lovr.filesystem.isFile( file )
+	
+	-- Early returns work, so if there really is a problem then you return and the game will attempt to skip loading this file
+	if (not is_valid) then return print("Not valid texture: ", file) end
+	
+	local size = lovr.filesystem.getSize( file )
+	
+	print("Loading RAW", is_valid, size)
+	
+	local blob_file = lovr.filesystem.newBlob( file )
+	
+	if ( blob_file == nil ) then return false end
+	
+	-- RESET read position
+	local file_index = 0
+	local temp_index = 0
+	
+	local header, width, height = "", -1, -1
+	
+	-- Timesplitters textures have the following headers:
+	-- Q6 is raw rgba
+	-- Q8 is palette based with 256 colors and an array of indices
+	-- M8 predefined mipmapped Q8
+	header, temp_index = readUntilTerminate( blob_file, file_index, 0x20 )
+	file_index = file_index + temp_index
+	
+	width, temp_index = readUntilTerminateNumerical( blob_file, file_index, 0x20 )
+	file_index = file_index + temp_index
+	
+	height, temp_index = readUntilTerminate( blob_file, file_index, 0x20 )
+	file_index = file_index + temp_index
+	
+	print( header, width, height )
+end
 
 -- When the engine calls to load your level
 -- Here you state how the mesh is formatted

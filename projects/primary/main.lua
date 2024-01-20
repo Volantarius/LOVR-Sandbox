@@ -165,8 +165,10 @@ function lovr.load()
 	if ( ts_index > 0 ) then
 		local ts_table = module_addons.getAddonTable( ts_index )
 		
-		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
-		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
+		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
+		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
+		
+		ts_table.loadTexture( "addons/timesplitters/textures/1834.qpm" )
 	end
 end
 
