@@ -81,18 +81,20 @@ local function readUntilTerminate( blob, offset, endChar )
 			
 			read_count = i + 1
 			
+			offset = offset + read_count
+
 			break
 		end
 		
 		table.insert( string_temp, char )
 	end
-	
+
 	return final, read_count
 end
 
 -- Assumes bytes are ascii
 -- Basically subtract the byte by 48
-local function readUntilTerminateNumerical( blob, offset, endChar )
+local function readUntilTerminateNumber( blob, offset, endChar )
 	local digits = {}
 	local digits_count = 0
 	local read_count = 0
@@ -148,24 +150,61 @@ function ts.loadTexture( file )
 	
 	-- RESET read position
 	local file_index = 0
-	local temp_index = 0
-	
+	local string_size = 0
+
 	local header, width, height = "", -1, -1
-	
+	local unknown_value, unknown_k = 0, 0
+
+	-- This is so messy ugh
+	-- we have two return values for the read count
+
 	-- Timesplitters textures have the following headers:
 	-- Q6 is raw rgba
 	-- Q8 is palette based with 256 colors and an array of indices
 	-- M8 predefined mipmapped Q8
-	header, temp_index = readUntilTerminate( blob_file, file_index, 0x20 )
-	file_index = file_index + temp_index
-	
-	width, temp_index = readUntilTerminateNumerical( blob_file, file_index, 0x20 )
-	file_index = file_index + temp_index
-	
-	height, temp_index = readUntilTerminate( blob_file, file_index, 0x20 )
-	file_index = file_index + temp_index
-	
-	print( header, width, height )
+	header, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
+	file_index = file_index + string_size
+
+	width, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
+	file_index = file_index + string_size
+
+	height, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
+	file_index = file_index + string_size
+
+	-- Opacity?
+	unknown_value, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
+	file_index = file_index + string_size
+
+	-- If v use palette??
+	unknown_k, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
+	file_index = file_index + string_size
+
+	local palette_size = 256
+
+	if ( header == "M8" ) then
+		local new_palette, _ = 0, 0
+
+		new_palette, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
+		_, string_size = readUntilTerminate( blob_file, file_index, 0x0A )
+
+		palette_size = new_palette
+	else
+		new_palette, string_size = readUntilTerminateNumber( blob_file, file_index, 0x0A )
+
+		palette_size = new_palette
+	end
+
+	if ( header == "Q8" ) then
+		-- create q8
+	elseif ( header == "Q6" ) then
+		-- create
+	elseif ( header == "M8" ) then
+		--
+	else
+		--
+	end
+
+	print( header, width, height, unknown_value )
 end
 
 -- When the engine calls to load your level
