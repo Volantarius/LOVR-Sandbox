@@ -1,67 +1,19 @@
+local ffi = require("ffi")
+
 local ts = {}
 
---[[local normal = lovr.math.newVec3(0, 1, 0)
-					
-					local ind_a = 0
-					local ind_b = 0
-					local ind_c = 0
-					
-					local odd_order = 1
-					
-					if ( math.modf(strip[3], 1) == 1 ) then
-						odd_order = 0
-					end
-					
-					if ( vert_index > 2 ) then
-						if ( math.modf(vert_index, 2) == odd_order ) then
-							ind_a = new_vert_index - 0
-							ind_b = new_vert_index - 1
-							ind_c = new_vert_index - 2
-						else
-							ind_a = new_vert_index - 2
-							ind_b = new_vert_index - 1
-							ind_c = new_vert_index - 0
-						end
-						
-						local room_a = mesh_element[ind_a]
-						local room_b = mesh_element[ind_b]
-						local room_c = mesh_element[ind_c]
-						
-						-- calc face normal
-						-- ind_a
-						local vec_a = lovr.math.newVec3(room_a[1], room_a[2], room_a[3])
-						-- ind_b
-						local vec_b = lovr.math.newVec3(room_b[1], room_b[2], room_b[3])
-						-- ind_c
-						local vec_c = lovr.math.newVec3(room_c[1], room_c[2], room_c[3])
-						
-						local vec_xx = vec_b - vec_a
-						local vec_yy = vec_c - vec_a
-						
-						-- We do a cross product of the positions to find the orientation
-						normal = vec_xx:cross(vec_yy)
-						normal:normalize()
-					end
-					
-					-- We then update the format of the entire mesh to use the normal data
-					mesh_element[new_vert_index][4] = normal.x
-					mesh_element[new_vert_index][5] = normal.y
-					mesh_element[new_vert_index][6] = normal.z
-					
-					-- Set the first two elements with the same normal as it's dominate one
-					if ( vert_index == 3 ) then
-						mesh_element[new_vert_index - 1][4] = normal.x
-						mesh_element[new_vert_index - 1][5] = normal.y
-						mesh_element[new_vert_index - 1][6] = normal.z
-						mesh_element[new_vert_index - 2][4] = normal.x
-						mesh_element[new_vert_index - 2][5] = normal.y
-						mesh_element[new_vert_index - 2][6] = normal.z
-					end]]
-
-function ts.loadPak( file ) end
+--[[
+	TODO
+	
+	Paks will need a callback of some sort to create a filesytem like handler
+	It can be loaded using a blob, and then the offsets and strings for that format
+	can easily be translated into something like the LOVR filesystem structure.
+	
+	PROBLEM I don't know if it is a great idea to setup something like that and interface it in runtime
+]]
 
 -- Blob file
--- endChar number
+-- endChar (ascii number)
 -- Returns string and amount of bytes read
 local function readUntilTerminate( blob, offset, endChar )
 	local string_temp = {}
@@ -94,6 +46,7 @@ end
 
 -- Assumes bytes are ascii
 -- Basically subtract the byte by 48
+-- Also re constructs the number using 10s and stuff (REPLACE WITH BIT shifter)
 local function readUntilTerminateNumber( blob, offset, endChar )
 	local digits = {}
 	local digits_count = 0
@@ -116,6 +69,8 @@ local function readUntilTerminateNumber( blob, offset, endChar )
 			
 			digits_count = #digits
 			
+			offset = offset + read_count
+			
 			break
 		end
 		
@@ -134,15 +89,68 @@ local function readUntilTerminateNumber( blob, offset, endChar )
 	return final, read_count
 end
 
+--
+-- Blobby
+--
+local function createQ8( blob, offset, width, height, palette )
+	local table_palette = {}
+	
+	-- TODO: Update the string at the end to use the texture name
+	local aaa = lovr.data.newImage( width, height, "rgba8", lovr.data.newBlob( width * height * 4, "testpal" ) )
+	
+	-- Paletted images use a list of colors instead of a raw data
+	-- This is usually stored as a byte allowing 256 colors instead of the usual 32bit millions
+	-- Can make the stored data larger but it is a very nice compression
+	
+	local file_index = offset * 1
+	
+	local red, gre, blu, alp = 0, 0, 0, 0
+	
+	local palette_index = offset * 1
+	local read_index = offset + (palette * 4)
+	
+	--
+	-- Feast your eyes! This is quite literally a shader. This is what your gpu is good at doing.
+	--
+	for x = 0, (width - 1) do
+		for y = 0, (height - 1) do
+			local i = (width * x) + y
+			
+			-- Read the index from the palette position
+			local index = blob:getU8(read_index + i, 1)
+			
+			-- Multiply by 4, this is the stride because we have 4 components per index from the palette
+			index = index * 4
+			
+			-- Last argument is 4 to read all four byte into the variables
+			-- I don't really like this short hand which is why there is a note for reading
+			-- Finally we are using the palette_index offset and using the index from above
+			red, gre, blu, alp = blob:getU8(palette_index + index, 4)
+			
+			alp = (alp / 255) * 2
+			
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, alp)
+		end
+	end
+	
+	local texture = lovr.graphics.newTexture(aaa, {format = "rgba8", type = "2d", linear = true})
+	
+	return texture
+end
+
+--
+-- Using a HEX editor that supports various visual interpretations of the binary is helpful
+-- in seeing what the data is structured like. A Hex editor in LOVE2d is a great project to
+-- start if you want to reverse engineer formats like this one!
+--
 function ts.loadTexture( file )
+	local blah = 0-- throw away variable
 	local is_valid = lovr.filesystem.isFile( file )
 	
 	-- Early returns work, so if there really is a problem then you return and the game will attempt to skip loading this file
 	if (not is_valid) then return print("Not valid texture: ", file) end
 	
 	local size = lovr.filesystem.getSize( file )
-	
-	print("Loading RAW", is_valid, size)
 	
 	local blob_file = lovr.filesystem.newBlob( file )
 	
@@ -153,7 +161,7 @@ function ts.loadTexture( file )
 	local string_size = 0
 
 	local header, width, height = "", -1, -1
-	local unknown_value, unknown_k = 0, 0
+	local unknown_value, unknown_v = 0, ""
 
 	-- This is so messy ugh
 	-- we have two return values for the read count
@@ -172,39 +180,46 @@ function ts.loadTexture( file )
 	file_index = file_index + string_size
 
 	-- Opacity?
-	unknown_value, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
+	unknown_value, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
 
 	-- If v use palette??
-	unknown_k, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
+	unknown_v, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
-
+	
 	local palette_size = 256
-
-	if ( header == "M8" ) then
-		local new_palette, _ = 0, 0
-
-		new_palette, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
-		_, string_size = readUntilTerminate( blob_file, file_index, 0x0A )
-
-		palette_size = new_palette
-	else
-		new_palette, string_size = readUntilTerminateNumber( blob_file, file_index, 0x0A )
-
-		palette_size = new_palette
+	
+	palette_size, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
+	file_index = file_index + string_size
+	
+	-- Adjust to the next (4 * byte). The file is in binary and keeping the data aligned
+	-- like a struct is very useful for loading on the ps2 as it wasn't worried about tampering or bugs
+	-- And because we use a terminator to end the stream it can always be off by some offset
+	if ( math.fmod( file_index, 4 ) > 0 ) then
+		file_index = file_index + (4 - math.fmod( file_index, 4 ))
 	end
+
+	local texture = false
 
 	if ( header == "Q8" ) then
-		-- create q8
+		
+		texture = createQ8( blob_file, file_index, width, height, palette_size )
+
 	elseif ( header == "Q6" ) then
+
 		-- create
+
 	elseif ( header == "M8" ) then
+
 		--
+
 	else
 		--
 	end
 
-	print( header, width, height, unknown_value )
+	--print( "penis", header, width, height, unknown_value )
+
+	return texture
 end
 
 -- When the engine calls to load your level

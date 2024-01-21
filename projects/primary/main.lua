@@ -118,6 +118,8 @@ local import_table = false
 
 local tempTexture, clamper, screenShader, screenShaderTwo
 
+local test_texture = false
+
 -- texture system :: use strings to index textures! 8bit is fine like how it is in lua the lookup can be made faster as well
 g_textures = {}
 
@@ -168,7 +170,7 @@ function lovr.load()
 		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
 		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
 		
-		ts_table.loadTexture( "addons/timesplitters/textures/1834.qpm" )
+		test_texture = ts_table.loadTexture( "addons/timesplitters/textures/1838.qpm" )
 	end
 end
 
@@ -259,8 +261,15 @@ function testAddonScene( pass )
 			local ts_table = module_addons.getAddonTable( ts_index )
 			
 			pass:setColor(1, 1, 1)
+			
 			pass:setMaterial( g_textures[1] )
+			
+			if ( test_texture ) then
+				pass:setMaterial( test_texture )
+			end
+			
 			ts_table.renderScene( pass, import_table )
+			
 			pass:setMaterial( nil )
 		end
 	end
