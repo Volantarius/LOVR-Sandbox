@@ -5,11 +5,12 @@ local ts = {}
 --[[
 	TODO
 	
-	Paks will need a callback of some sort to create a filesytem like handler
+	Paks will need a callback of some sort to create a file system like handler
 	It can be loaded using a blob, and then the offsets and strings for that format
-	can easily be translated into something like the LOVR filesystem structure.
+	can easily be translated into something like the LOVR file system structure.
 	
 	PROBLEM I don't know if it is a great idea to setup something like that and interface it in runtime
+	Need to test before getting carried away with that.
 ]]
 
 -- Blob file
@@ -90,7 +91,7 @@ local function readUntilTerminateNumber( blob, offset, endChar )
 end
 
 --
--- Blobby
+-- Palette Image
 --
 local function createQ8( blob, offset, width, height, palette )
 	local table_palette = {}
@@ -112,9 +113,10 @@ local function createQ8( blob, offset, width, height, palette )
 	--
 	-- Feast your eyes! This is quite literally a shader. This is what your gpu is good at doing.
 	--
-	for x = 0, (width - 1) do
-		for y = 0, (height - 1) do
-			local i = (width * x) + y
+	for y = 0, (height - 1) do
+		for x = 0, (width - 1) do
+			-- Important! every Y we move by the width amount!
+			local i = (width * y) + x
 			
 			-- Read the index from the palette position
 			local index = blob:getU8(read_index + i, 1)
@@ -127,9 +129,35 @@ local function createQ8( blob, offset, width, height, palette )
 			-- Finally we are using the palette_index offset and using the index from above
 			red, gre, blu, alp = blob:getU8(palette_index + index, 4)
 			
-			alp = (alp / 255) * 2
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, (alp / 255) * 2)
+		end
+	end
+	
+	local texture = lovr.graphics.newTexture(aaa, {format = "rgba8", type = "2d", linear = true})
+	
+	return texture
+end
+
+--
+-- Raw RGBA
+--
+local function createQ6( blob, offset, width, height )
+	-- TODO: Update the string at the end to use the texture name
+	local aaa = lovr.data.newImage( width, height, "rgba8", lovr.data.newBlob( width * height * 4, "testpal" ) )
+	
+	local file_index = offset * 1
+	
+	local red, gre, blu, alp = 0, 0, 0, 0
+	
+	for y = 0, (height - 1) do
+		for x = 0, (width - 1) do
+			-- Important! every Y we move by the width amount!
+			local i = ((width * y) + x) * 4
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, alp)
+			-- Read the 4 bytes into the variables
+			red, gre, blu, alp = blob:getU8(file_index + i, 4)
+			
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, (alp / 255) * 2)
 		end
 	end
 	
@@ -161,7 +189,7 @@ function ts.loadTexture( file )
 	local string_size = 0
 
 	local header, width, height = "", -1, -1
-	local unknown_value, unknown_v = 0, ""
+	local color_depth, unknown_v = 0, ""
 
 	-- This is so messy ugh
 	-- we have two return values for the read count
@@ -178,12 +206,12 @@ function ts.loadTexture( file )
 
 	height, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
-
-	-- Opacity?
-	unknown_value, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
+	
+	
+	color_depth, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
-
-	-- If v use palette??
+	
+	-- I think this is the value
 	unknown_v, string_size = readUntilTerminate( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
 	
@@ -192,32 +220,34 @@ function ts.loadTexture( file )
 	palette_size, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
 	
+	print(color_depth, unknown_v, palette_size)
+	
 	-- Adjust to the next (4 * byte). The file is in binary and keeping the data aligned
 	-- like a struct is very useful for loading on the ps2 as it wasn't worried about tampering or bugs
 	-- And because we use a terminator to end the stream it can always be off by some offset
 	if ( math.fmod( file_index, 4 ) > 0 ) then
 		file_index = file_index + (4 - math.fmod( file_index, 4 ))
 	end
-
+	
 	local texture = false
 
+	print( "file size: ", blob_file:getSize() )
+	
 	if ( header == "Q8" ) then
 		
 		texture = createQ8( blob_file, file_index, width, height, palette_size )
-
+		
 	elseif ( header == "Q6" ) then
-
-		-- create
-
+		
+		texture = createQ6( blob_file, file_index, width, height )
+		
 	elseif ( header == "M8" ) then
-
+		
 		--
-
+		
 	else
 		--
 	end
-
-	--print( "penis", header, width, height, unknown_value )
 
 	return texture
 end
