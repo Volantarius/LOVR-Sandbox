@@ -170,8 +170,8 @@ function lovr.load()
 		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
 		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
 		
--- 		test_texture = ts_table.loadTexture( "addons/timesplitters/textures/1834.qpm" )
-		test_texture = ts_table.loadTexture( "addons/timesplitters/textures/1856.qpm" )
+		-- Eventually create a file system handler to load WADs, PAKs, etc.
+		test_texture = ts_table.loadTexture( "addons/timesplitters/textures/1856.qpm", "1856" )
 	end
 end
 
