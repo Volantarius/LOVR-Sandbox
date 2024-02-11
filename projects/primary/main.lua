@@ -118,8 +118,6 @@ local import_table = false
 
 local tempTexture, clamper, screenShader, screenShaderTwo
 
-local test_texture = false
-
 -- texture system :: use strings to index textures! 8bit is fine like how it is in lua the lookup can be made faster as well
 g_textures = {}
 
@@ -167,11 +165,21 @@ function lovr.load()
 	if ( ts_index > 0 ) then
 		local ts_table = module_addons.getAddonTable( ts_index )
 		
-		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
+		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
 		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
+		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level23.raw" )
 		
 		-- Eventually create a file system handler to load WADs, PAKs, etc.
-		test_texture = ts_table.loadTexture( "addons/timesplitters/textures/1856.qpm", "1856" )
+		-- Stride is from a struct usually.. So if we handle file this way where we can
+		-- specify a struct or table atleast in Lua, we could make file handling really simple
+		--
+		-- WAD I think is really the best use case for development at some point
+		-- Doom's package system and Half-Life's is like a really simple starting point
+		--
+		-- Because eventually we can do the same with TXD and DFF.. and IMG files
+		-- and just load GTA files like we do with other game packages...
+		-- Set this up like an addon or game definition format whatever we could just
+		-- find ways of loading many games with like no effort
 	end
 end
 
@@ -264,10 +272,6 @@ function testAddonScene( pass )
 			pass:setColor(1, 1, 1)
 			
 			pass:setMaterial( g_textures[1] )
-			
-			if ( test_texture ) then
-				pass:setMaterial( test_texture )
-			end
 			
 			ts_table.renderScene( pass, import_table )
 			

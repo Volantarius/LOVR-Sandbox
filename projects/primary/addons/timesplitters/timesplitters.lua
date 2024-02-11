@@ -57,9 +57,23 @@ ts = require("addons/timesplitters/textures")
 -- 24/1/17 We may have to setup addons to try and stick to one level at a time
 -- It's just that you will need to make sure you load a level the same way everytime, but thats models for you or whatever
 
+-- Need to extend this out into the real engine
+-- TODO: Suggest a better way of handling this for LOVR devs
+-- TODO: OR create a temporary sampler every mesh call?? because of all the different modes
+--[[local sampler_SWrapTWrap = lovr.graphics.newSampler({})
+local sampler_SWrapTEdge = lovr.graphics.newSampler({})
+local sampler_SEdgeTWrap = lovr.graphics.newSampler({})
+local sampler_SEdgeTEdge = lovr.graphics.newSampler({})]]
+
+local room_textures = {}
+
 -- Using tables because they are basically structs without names
 local rooms_room = {}
 local rooms_info = {}
+
+--[[local testsampler_storage = {
+	["wrap"] = {"repeat","clamp","repeat"}
+}]]
 
 local function renderScene( pass, import_table )
 	local groups_count = import_table[1]
@@ -68,8 +82,8 @@ local function renderScene( pass, import_table )
 	-- LUA 1 indices
 	local vertice_count = 1
 	
-	--pass:setWinding("counterclockwise")
-	--pass:setCullMode("front")
+	pass:setWinding("counterclockwise")
+	--pass:setWinding("clockwise")
 	
 	for group_index = 1, groups_count do
 		local current_group = import_table[3][group_index]
@@ -78,6 +92,28 @@ local function renderScene( pass, import_table )
 			local current_surface = import_table[4][surface_count + surface_index]
 			
 			local surface_vert_count = (current_surface[1] - 2) * 3
+			
+			-- Material IDs are stored as indices for meshs starting from 1
+			-- Material IDs point to the table created for the room
+			--current_group[1]
+			--room_textures[ current_group[1] ]
+			
+			pass:setMaterial( room_textures[ current_group[1] + 1 ][1] )
+			
+			--{vert_count, flags_a, flags_b}
+			--textures = {texture, flags_a, flags_b, flags_c}
+			
+			-- We need to create a sampler for each strip group
+			-- It's the lowest level this has to be buffered for. Materials share the same textures some times
+			-- so its better to allow that at this level and allow for materials to be generated with it's
+			-- sampler setup to let us use the most of the graphics card if possible lol
+			--pass:setSampler( lovr.graphics.newSampler( testsampler_storage ) )
+			
+			pass:setCullMode("front")
+			
+			if ( bit.band(current_surface[3], 1) == 1 ) then
+				pass:setCullMode("back")
+			end
 			
 			pass:mesh( import_table[5], lovr.math.mat4(), vertice_count, surface_vert_count, 1 )
 			
@@ -264,6 +300,11 @@ local function get_strips( blob, strips_size, strips_address )
 			-- Raw value
 			--vertice_count = vertice_count + vert_count
 			
+			-- TODO: 24/2/11 Create samplers for each strip setup. Even though I think
+			-- graphics cards might not natively support all strip modes on drawing?
+			-- Because if this is a graphics card option and not just a GL option
+			-- this could open the window to all drawing modes per call?
+			
 			-- We are converting vertice count to triangle count for this engine
 			vertice_count = vertice_count + (vert_count - 2)
 		end
@@ -271,6 +312,78 @@ local function get_strips( blob, strips_size, strips_address )
 	end
 	
 	return strip_info
+end
+
+-- Bad naming change this!
+local areaportals_level = {}
+local areaportals_rooms = {}
+
+local function do_area_portals( blob_file, room_count, block_rooms, block_areaportals )
+	local file_index = block_rooms + (1 * 4 * 11)
+	
+	--print("READ:", file_index)
+	
+	-- Read the first room's mesh address because the area portal list is above it
+	-- I am probably reading this out of order but this works
+	local x_areaportal = blob_file:getU32(file_index, 1)
+	
+	file_index = x_areaportal - 60
+	
+	--print("READ:", file_index)
+	
+	local areaportal_end = blob_file:getU32(file_index, 1)
+	
+	local areaportal_count = (areaportal_end - block_areaportals) / 16
+	areaportal_count = (areaportal_count - 1) * 4
+	
+	for i = 1, areaportal_count do areaportals_level[i] = {} end
+	for i = 1, (room_count - 1) do areaportals_rooms[i] = {} end
+	
+	--print("READ:", areaportal_count)
+	
+	local areaportal_vertice_count = 0
+	
+	for i = 1, areaportal_count do
+		file_index = block_areaportals + (i * 4)
+		
+		local areaportal_address = blob_file:getU32(file_index, 1)
+		
+		file_index = areaportal_address * 1
+		
+		local room_a = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		
+		local room_b = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		
+		-- Room indices are off by one
+		-- And we skip room zero!
+		room_a = room_a - 1
+		room_b = room_b - 1
+		
+		-- Unknown flags
+		local unknown_a = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		local unknown_b = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		local unknown_c = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		
+		-- Area Portals are triangle fans :>
+		local vert_count = blob_file:getU32(file_index, 1)
+		
+		print("ap test", room_a, "||", room_b)
+		
+		areaportals_level[i] = {room_a, room_b, vert_count, areaportal_vertice_count}
+		
+		--areaportals_rooms[room_a] = {}
+		--areaportals_rooms[room_b] = {}
+		
+		-- Keep count of the vertices
+		areaportal_vertice_count = areaportal_vertice_count + vert_count
+	end
+	
+	--file_index
 end
 
 -- TODO: CLOSE BLOB FILE, clean up and garbage collect when we are done
@@ -314,7 +427,7 @@ function ts.loadLevel( file )
 	-- IN Cpp this for loop is 0 to 38
 	-- IN Lua this for loop is 0 to 39 () : 0 to (x - 1)
 	-- Lua is 1 to (x - 1)
-	for material_index = 1, (material_count - 1) do
+	for material_index = 0, (material_count - 1) do
 		local texture_index = blob_file:getU32(file_index, 1)
 		file_index = file_index + 4
 		
@@ -325,13 +438,19 @@ function ts.loadLevel( file )
 		local texture_flags_c = blob_file:getU32(file_index, 1)
 		file_index = file_index + 4
 		
-		--print( "texture: ", texture_index )
+		--print( "texture: ", texture_index, material_index )
 		
 		-- Then we create a list of materials with all of the following flags
 		-- And texture name
+		
+		local texture_image = ts.loadTexture( string.format("addons/timesplitters/textures/%04d.qpm", texture_index), string.format("%04d", texture_index) )
+		
+		room_textures[material_index + 1] = {texture_image, texture_flags_a, texture_flags_b, texture_flags_c}
 	end
 	
 	for room_index = 1, (room_count - 1) do rooms_room[room_index] = {} end
+	
+	print("ROOMS:", room_count)
 	
 	-- //// Meshes ////
 	-- We start with one and (room_count - 1)
@@ -514,9 +633,19 @@ function ts.loadLevel( file )
 					local triangle_offset = (test_vert_index - 1) * 3
 					
 					-- 1,2,3 and 0,1,2 This is lua again so indices must start with 1
-					new_mesh_data[ triangle_offset + 1 ] = mesh_data[ fixed_index + 0 ]
-					new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
-					new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 2 ]
+					--new_mesh_data[ triangle_offset + 1 ] = mesh_data[ fixed_index + 0 ]
+					--new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
+					--new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 2 ]
+					
+					if ( bit.band(vert_index, 1) == 1 ) then
+						new_mesh_data[ triangle_offset + 1 ] = mesh_data[ fixed_index + 2 ]
+						new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
+						new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 0 ]
+					else
+						new_mesh_data[ triangle_offset + 1 ] = mesh_data[ fixed_index + 0 ]
+						new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
+						new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 2 ]
+					end
 					
 					new_vert_index = new_vert_index + 1
 					
@@ -556,12 +685,7 @@ function ts.loadLevel( file )
 	
 	-- Area Portals and Visibility
 	-- Basically Binary Space Partitioning using stencil portals
-	
-	file_index = block_rooms * 4 * 11
-	
-	-- Read the first room's mesh address because the area portal list is above it
-	-- I am probably reading this out of order but this works
-	local x_areaportal_room = blob_file:getU32(file_index, 1)
+	do_area_portals( blob_file, room_count, block_rooms, block_areaportals )
 	
 	-- TODO
 	--return rooms_room[1]

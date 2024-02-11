@@ -10,6 +10,13 @@
 ]]
 
 --[[
+	BITWISE IS IN A LIBRARY
+	
+	bit.band(2,1) == 0
+	bit.band(1,1) == 1
+]]
+
+--[[
 	
 	FOR LOOPS and INDEXING
 	

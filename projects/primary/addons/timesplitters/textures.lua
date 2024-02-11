@@ -117,11 +117,11 @@ local function createQ8( blob, offset, width, height, palette )
 			-- Finally we are using the palette_index offset and using the index from above
 			red, gre, blu, alp = blob:getU8(palette_index + index, 4)
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, (alp / 255) * 2)
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp * 2) / 255))
 		end
 	end
 	
-	local texture = lovr.graphics.newTexture(aaa, {format = "rgba8", type = "2d", linear = true})
+	local texture = lovr.graphics.newTexture(aaa, {format = "rgba8", type = "2d", linear = false, samples = 4, mipmaps = true})
 	
 	return texture
 end
@@ -145,11 +145,11 @@ local function createQ6( blob, offset, width, height )
 			-- Read the 4 bytes into the variables
 			red, gre, blu, alp = blob:getU8(file_index + i, 4)
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, (alp / 255) * 2)
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp * 2) / 255))
 		end
 	end
 	
-	local texture = lovr.graphics.newTexture(aaa, {format = "rgba8", type = "2d", linear = true})
+	local texture = lovr.graphics.newTexture(aaa, {format = "rgba8", type = "2d", linear = false, samples = 4, mipmaps = true})
 	
 	return texture
 end
@@ -208,7 +208,7 @@ function ts.loadTexture( file, name )
 	palette_size, string_size = readUntilTerminateNumber( blob_file, file_index, 0x20 )
 	file_index = file_index + string_size
 	
-	print(color_depth, unknown_v, palette_size)
+	--print(color_depth, unknown_v, palette_size)
 	
 	-- Adjust to the next (4 * byte). The file is in binary and keeping the data aligned
 	-- like a struct is very useful for loading on the ps2 as it wasn't worried about tampering or bugs
@@ -219,7 +219,7 @@ function ts.loadTexture( file, name )
 	
 	local texture = false
 
-	print( "file size: ", blob_file:getSize() )
+	--print( "file size: ", blob_file:getSize() )
 	
 	if ( header == "Q8" ) then
 		
