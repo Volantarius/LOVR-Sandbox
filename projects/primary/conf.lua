@@ -3,8 +3,8 @@ function lovr.conf(t)
 	t.identity = "Volantarius"
 	t.window.title = "TEST"
 	t.window.resizable = true
-	--t.window.width = 1600
-	--t.window.height = 900
+	t.window.width = 1280
+	t.window.height = 800
 	t.console = true
 	
 	t.modules.headset = true

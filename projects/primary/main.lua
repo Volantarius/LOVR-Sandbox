@@ -167,7 +167,9 @@ function lovr.load()
 		
 		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
 		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
-		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level23.raw" )
+		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level24.raw" )
+		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level21.raw" )
+		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level2.raw" )
 		
 		-- Eventually create a file system handler to load WADs, PAKs, etc.
 		-- Stride is from a struct usually.. So if we handle file this way where we can

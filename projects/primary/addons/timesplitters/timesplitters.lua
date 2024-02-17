@@ -16,7 +16,33 @@ ts = require("addons/timesplitters/textures")
 	Need to test before getting carried away with that.
 ]]
 
+local raw_shader_play_vert = [[
+	// The texture to sample from.
+	
+	// lovr's shader architecture will automatically supply a main(), which will call this lovrmain() function
+	vec4 lovrmain() {
+		return Projection * View * Transform * VertexPosition;
+	}
+]]
 
+local raw_shader_play_frag = [[
+	// The texture to sample from.
+	
+	// lovr's shader architecture will automatically supply a main(), which will call this lovrmain() function
+	vec4 lovrmain() {
+		//vec4 cool = (1.0 - Color) * getPixel(ColorTexture, UV);
+		
+		vec4 cool = (Color * Color) * getPixel(ColorTexture, UV);
+		
+		//vec4 cool = ( abs( (Color + getPixel(ColorTexture, UV)) - 1.0 ) / 2 );
+		
+		//vec4 cool = abs( abs( ((Color * Color) + getPixel(ColorTexture, UV)) - 1.0 ) / 2 );
+		
+		cool[3] = Color[3];
+		
+		return cool;
+	}
+]]
 
 -- When the engine calls to load your level
 -- Here you state how the mesh is formatted
@@ -60,10 +86,19 @@ ts = require("addons/timesplitters/textures")
 -- Need to extend this out into the real engine
 -- TODO: Suggest a better way of handling this for LOVR devs
 -- TODO: OR create a temporary sampler every mesh call?? because of all the different modes
---[[local sampler_SWrapTWrap = lovr.graphics.newSampler({})
-local sampler_SWrapTEdge = lovr.graphics.newSampler({})
-local sampler_SEdgeTWrap = lovr.graphics.newSampler({})
-local sampler_SEdgeTEdge = lovr.graphics.newSampler({})]]
+-- Anyway translated to GL terms as well
+--
+-- This may have a problem with creating more compare types... like use only one type for shadows and this has to be restarted when changed
+local sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "repeat"}, compare="none"})
+local sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "repeat"}, compare="none"})
+local sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "repeat"}, compare="none"})
+local sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "repeat"}, compare="none"})
+
+--local sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "clamp"}, compare="none"})
+--local sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "clamp"}, compare="none"})
+--local sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "clamp"}, compare="none"})
+--local sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "clamp"}, compare="none"})
+
 
 local room_textures = {}
 
@@ -71,9 +106,7 @@ local room_textures = {}
 local rooms_room = {}
 local rooms_info = {}
 
---[[local testsampler_storage = {
-	["wrap"] = {"repeat","clamp","repeat"}
-}]]
+local shader_playaround = lovr.graphics.newShader(raw_shader_play_vert, raw_shader_play_frag)
 
 local function renderScene( pass, import_table )
 	local groups_count = import_table[1]
@@ -100,9 +133,6 @@ local function renderScene( pass, import_table )
 			
 			pass:setMaterial( room_textures[ current_group[1] + 1 ][1] )
 			
-			--{vert_count, flags_a, flags_b}
-			--textures = {texture, flags_a, flags_b, flags_c}
-			
 			-- We need to create a sampler for each strip group
 			-- It's the lowest level this has to be buffered for. Materials share the same textures some times
 			-- so its better to allow that at this level and allow for materials to be generated with it's
@@ -115,6 +145,29 @@ local function renderScene( pass, import_table )
 				pass:setCullMode("back")
 			end
 			
+			--{vert_count, flags_a, flags_b}
+			--textures = {texture, flags_a, flags_b, flags_c}
+			
+			pass:setSampler( sampler_SWrapTWrap )
+			local SWrap = false
+			
+			if ( bit.band(room_textures[ current_group[1] + 1 ][2], 1) == 1 ) then
+				pass:setSampler( sampler_SEdgeTWrap )
+				SWrap = true
+			end
+			
+			if ( bit.band(room_textures[ current_group[1] + 1 ][3], 1) == 1 ) then
+				
+				if ( SWrap ) then
+					pass:setSampler( sampler_SEdgeTEdge )
+				else
+					pass:setSampler( sampler_SWrapTEdge )
+				end
+				
+			end
+			
+			pass:setShader( shader_playaround )
+			
 			pass:mesh( import_table[5], lovr.math.mat4(), vertice_count, surface_vert_count, 1 )
 			
 			vertice_count = vertice_count + surface_vert_count
@@ -122,6 +175,8 @@ local function renderScene( pass, import_table )
 		
 		surface_count = surface_count + current_group[2]
 	end
+	
+	pass:setSampler( sampler_SWrapTWrap )
 end
 
 --{primary_group_size, secondary_group_size, mesh_groups, room_surfaces, mesh_buffer}
@@ -318,6 +373,13 @@ end
 local areaportals_level = {}
 local areaportals_rooms = {}
 
+local room_a_adjacent_rooms = 0
+local room_b_adjacent_rooms = 0
+local level_room_a_adjacent_rooms = {}
+local level_room_b_adjacent_rooms = {}
+local areaportal_addresses = {}
+local vertex_position_color = {}
+
 local function do_area_portals( blob_file, room_count, block_rooms, block_areaportals )
 	local file_index = block_rooms + (1 * 4 * 11)
 	
@@ -339,12 +401,27 @@ local function do_area_portals( blob_file, room_count, block_rooms, block_areapo
 	for i = 1, areaportal_count do areaportals_level[i] = {} end
 	for i = 1, (room_count - 1) do areaportals_rooms[i] = {} end
 	
-	--print("READ:", areaportal_count)
+	print("PORTALS ():", areaportal_count)
+	
+	-- Area Portal vertice positions
+	for i = 1, areaportal_count do
+		areaportal_addresses[i + 0] = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		
+		areaportal_addresses[i + 1] = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		
+		areaportal_addresses[i + 2] = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+		
+		areaportal_addresses[i + 3] = blob_file:getU32(file_index, 1)
+		file_index = file_index + 4
+	end
 	
 	local areaportal_vertice_count = 0
 	
-	for i = 1, areaportal_count do
-		file_index = block_areaportals + (i * 4)
+	for areaportal_index = 1, areaportal_count do
+		file_index = block_areaportals + (areaportal_index * 4)
 		
 		local areaportal_address = blob_file:getU32(file_index, 1)
 		
@@ -372,16 +449,85 @@ local function do_area_portals( blob_file, room_count, block_rooms, block_areapo
 		-- Area Portals are triangle fans :>
 		local vert_count = blob_file:getU32(file_index, 1)
 		
+		local vert_fan_count = vert_count
+		
+		if (vert_count > 3) then
+			vert_fan_count = vert_fan_count + ((vert_count - 3) * 2)
+		end
+		
+		local vert_index = 0
+		
+		for i = 1, vert_fan_count do
+			vertex_position_color[i] = {}
+			
+			local x = blob_file:getF32(file_index, 1)
+			file_index = file_index + 4
+			local y = blob_file:getF32(file_index, 1)
+			file_index = file_index + 4
+			local z = blob_file:getF32(file_index, 1)
+			file_index = file_index + 4
+			
+			print(x, y, z)
+			
+			--[[if (i > 2) then
+				vertex_position_color[] = vertex_position_color[j - 1]
+				vertex_position_color[] = vertex_position_color[j - 3]
+				vertex_position_color[] = {}
+				
+				vert_index = vert_index + 2
+			else
+				
+				
+			end]]
+		end
+		
 		print("ap test", room_a, "||", room_b)
 		
-		areaportals_level[i] = {room_a, room_b, vert_count, areaportal_vertice_count}
+		areaportals_level[areaportal_index] = {room_a, room_b, vert_count, areaportal_vertice_count}
 		
-		--areaportals_rooms[room_a] = {}
-		--areaportals_rooms[room_b] = {}
+		local portal_a_good = true
+		local portal_b_good = true
+		
+		-- -..-
+		-- adjacent rooms is an ipairs
+		for i = 0, room_a_adjacent_rooms do
+			if (room_b == level_room_a_adjacent_rooms[i]) then
+				portal_a_good = false
+			end
+		end
+		
+		-- The difference is that ipairs counts the array, instead of referencing the number we are counting
+		--[[for i = 0, ipairs(level_room_a_adjacent_rooms) do
+			if (room_b == level_room_a_adjacent_rooms[i]) then
+				portal_a_good = false
+			end
+		end]]
+		
+		for i = 0, room_b_adjacent_rooms do
+			if (room_a == level_room_b_adjacent_rooms[i]) then
+				portal_b_good = false
+			end
+		end
+		
+		if (portal_a_good) then
+			print("	ap:", areaportal_index, room_b)
+			
+			level_room_a_adjacent_rooms[room_a_adjacent_rooms] = room_b
+			room_a_adjacent_rooms = room_a_adjacent_rooms + 1
+		end
+		
+		if (portal_b_good) then
+			print("	ap:", areaportal_index, room_a)
+			
+			level_room_b_adjacent_rooms[room_b_adjacent_rooms] = room_a
+			room_b_adjacent_rooms = room_b_adjacent_rooms + 1
+		end
 		
 		-- Keep count of the vertices
 		areaportal_vertice_count = areaportal_vertice_count + vert_count
 	end
+	
+	print("VERT COUNMT:", areaportal_vertice_count)
 	
 	--file_index
 end
@@ -427,7 +573,7 @@ function ts.loadLevel( file )
 	-- IN Cpp this for loop is 0 to 38
 	-- IN Lua this for loop is 0 to 39 () : 0 to (x - 1)
 	-- Lua is 1 to (x - 1)
-	for material_index = 0, (material_count - 1) do
+	for material_index = 1, (material_count - 1) do
 		local texture_index = blob_file:getU32(file_index, 1)
 		file_index = file_index + 4
 		
@@ -445,7 +591,7 @@ function ts.loadLevel( file )
 		
 		local texture_image = ts.loadTexture( string.format("addons/timesplitters/textures/%04d.qpm", texture_index), string.format("%04d", texture_index) )
 		
-		room_textures[material_index + 1] = {texture_image, texture_flags_a, texture_flags_b, texture_flags_c}
+		room_textures[material_index] = {texture_image, texture_flags_a, texture_flags_b, texture_flags_c}
 	end
 	
 	for room_index = 1, (room_count - 1) do rooms_room[room_index] = {} end
