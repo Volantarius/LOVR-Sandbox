@@ -104,12 +104,12 @@ local pi_half_inverted = -math.pi/2
 
 local test_mesh = {
 	{ 0,  0, 0,  0, 1, 0,  0, 0,  1, 0, 0, 1},
-	{ 0, 10, 0,  0, 1, 0,  0, 1,  0, 1, 0, 1},
-	{10,  0, 0,  0, 1, 0,  1, 0,  0, 0, 1, 1},
+	{ 0, 3, 0,  0, 1, 0,  0, 1,  0, 1, 0, 1},
+	{3,  0, 0,  0, 1, 0,  1, 0,  0, 0, 1, 1},
 	
-	{ 0, 10, 0,  0, 1, 0,  0, 1,  0, 1, 0, 1},
-	{10,  0, 0,  0, 1, 0,  1, 0,  0, 0, 1, 1},
-	{10, 10, 0,  0, 1, 0,  1, 1,  1, 1, 1, 1}
+	{ 0, 3, 0,  0, 1, 0,  0, 1,  0, 1, 0, 1},
+	{3,  0, 0,  0, 1, 0,  1, 0,  0, 0, 1, 1},
+	{3, 3, 0,  0, 1, 0,  1, 1,  1, 1, 1, 1}
 }
 local mesh_example = false
 
@@ -154,9 +154,9 @@ function lovr.load()
 	
 	mesh_example = lovr.graphics.newMesh(test_mesh_format, test_mesh)
 	
-	-- /////////////////
-	-- Addon development starts here
-	-- \\\\\\\\\\\\\\\\\
+	--[[////////////////
+		   Addon development starts here
+	-- \\\\\\\\\\\\\\\]]
 	
 	module_addons.init()
 	
@@ -165,11 +165,30 @@ function lovr.load()
 	if ( ts_index > 0 ) then
 		local ts_table = module_addons.getAddonTable( ts_index )
 		
-		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level10.raw" )
-		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
-		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level24.raw" )
-		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level21.raw" )
-		--import_table = ts_table.loadLevel( "addons/timesplitters/levels/level2.raw" )
+		--[[////////////////
+			# 2 village
+			# 5 chemical plant
+			# 8 haunted mansion
+			# 9 planet x
+			# 10 compound
+			# 11 streets
+			# 12 warzone
+			# 13 construction site
+			# 14 cyberden
+			# 15 bank
+			# 16 graveyard
+			# 17 spaceship
+			# 18 mall
+			# 21 chinese (best to debug here, there are rooms with no mesh data so that is a challenge)
+			# 22 castle
+			# 23 egypt
+			# 24 docks
+			# 25 unused or test map (VR themed)
+			# 26 egypt MP
+			# 27 spaceways
+		-- \\\\\\\\\\\\\\\]]
+		
+		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
 		
 		-- Eventually create a file system handler to load WADs, PAKs, etc.
 		-- Stride is from a struct usually.. So if we handle file this way where we can
@@ -287,8 +306,8 @@ function runExampleScene( pass )
 	pass:setColor(1, 1, 1)
 	pass:draw( mesh_example, -5, 0, -3.5 )
 	
-	pass:setColor(0.76, 1, 0)
-	pass:sphere(-10, 0, 0, 3, 0, 0, 0, 0, 16, 8)
+	--pass:setColor(0.76, 1, 0)
+	--pass:sphere(-10, 0, 0, 3, 0, 0, 0, 0, 16, 8)
 	
 	pass:setColor(1, 1, 1)
 	pass:setMaterial( g_textures[2] )

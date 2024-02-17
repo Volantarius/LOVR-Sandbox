@@ -117,7 +117,7 @@ local function createQ8( blob, offset, width, height, palette )
 			-- Finally we are using the palette_index offset and using the index from above
 			red, gre, blu, alp = blob:getU8(palette_index + index, 4)
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp * 2) / 255))
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp / 127) * 2))
 		end
 	end
 	
@@ -145,7 +145,7 @@ local function createQ6( blob, offset, width, height )
 			-- Read the 4 bytes into the variables
 			red, gre, blu, alp = blob:getU8(file_index + i, 4)
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp * 2) / 255))
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp / 127) * 2))
 		end
 	end
 	

@@ -21,7 +21,8 @@ local raw_shader_play_vert = [[
 	
 	// lovr's shader architecture will automatically supply a main(), which will call this lovrmain() function
 	vec4 lovrmain() {
-		return Projection * View * Transform * VertexPosition;
+		//return Projection * View * Transform * VertexPosition;
+		return DefaultPosition;
 	}
 ]]
 
@@ -30,15 +31,55 @@ local raw_shader_play_frag = [[
 	
 	// lovr's shader architecture will automatically supply a main(), which will call this lovrmain() function
 	vec4 lovrmain() {
-		//vec4 cool = (1.0 - Color) * getPixel(ColorTexture, UV);
+		//vec4 cool = (1.0 - Color) * (1.0 - Color) * getPixel(ColorTexture, UV);
 		
-		vec4 cool = (Color * Color) * getPixel(ColorTexture, UV);
+		//vec4 cool = Color * getPixel(ColorTexture, UV);
 		
-		//vec4 cool = ( abs( (Color + getPixel(ColorTexture, UV)) - 1.0 ) / 2 );
+		//vec4 color_coord = getPixel(ColorTexture, UV);
+		vec4 color_coord = texture(sampler2D(ColorTexture, Sampler), UV);
 		
-		//vec4 cool = abs( abs( ((Color * Color) + getPixel(ColorTexture, UV)) - 1.0 ) / 2 );
+		vec4 cool_color = (Color / 127.0);
 		
-		cool[3] = Color[3];
+		// Test of shader conversion instead of vertex conversion of byte
+		vec4 cool = (cool_color * cool_color) * color_coord;
+		//vec4 cool = (cool_color) * color_coord;
+		// 
+		// Maybe lower half is multiply and topper half is add
+		// 
+		
+		if ( cool_color[0] > 1.0 ) {
+			cool[0] = (Color[0] - 127.0) / 127.0;
+			
+			//cool[0] *= color_coord[0];
+			
+			cool[0] += cool_color[0];
+			
+			if (cool[0] > 1.0) {cool[0] = 1.0;}
+			if (cool[0] < 0.0) {cool[0] = 0.0;}
+		}
+		if ( cool_color[1] > 1.0 ) {
+			cool[1] = (Color[1] - 127.0) / 127.0;
+			
+			//cool[1] *= color_coord[1];
+			
+			cool[1] += cool_color[1];
+			
+			if (cool[1] > 1.0) {cool[1] = 1.0;}
+			if (cool[1] < 0.0) {cool[1] = 0.0;}
+		}
+		if ( cool_color[2] > 1.0 ) {
+			cool[2] = (Color[2] - 127.0) / 127.0;
+			
+			//cool[2] *= color_coord[2];
+			
+			cool[2] += cool_color[2];
+			
+			if (cool[2] > 1.0) {cool[2] = 1.0;}
+			if (cool[2] < 0.0) {cool[2] = 0.0;}
+		}
+		
+		//cool[3] = Color[3] / 127.0;
+		cool[3] = 1.0;
 		
 		return cool;
 	}
@@ -89,16 +130,10 @@ local raw_shader_play_frag = [[
 -- Anyway translated to GL terms as well
 --
 -- This may have a problem with creating more compare types... like use only one type for shadows and this has to be restarted when changed
-local sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "repeat"}, compare="none"})
-local sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "repeat"}, compare="none"})
-local sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "repeat"}, compare="none"})
-local sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "repeat"}, compare="none"})
-
---local sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "clamp"}, compare="none"})
---local sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "clamp"}, compare="none"})
---local sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "clamp"}, compare="none"})
---local sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "clamp"}, compare="none"})
-
+local sampler_SWrapTWrap = false
+local sampler_SWrapTEdge = false
+local sampler_SEdgeTWrap = false
+local sampler_SEdgeTEdge = false
 
 local room_textures = {}
 
@@ -106,7 +141,8 @@ local room_textures = {}
 local rooms_room = {}
 local rooms_info = {}
 
-local shader_playaround = lovr.graphics.newShader(raw_shader_play_vert, raw_shader_play_frag)
+--local shader_playaround = lovr.graphics.newShader(raw_shader_play_vert, raw_shader_play_frag)
+local shader_playaround = lovr.graphics.newShader("unlit", raw_shader_play_frag)
 
 local function renderScene( pass, import_table )
 	local groups_count = import_table[1]
@@ -118,10 +154,14 @@ local function renderScene( pass, import_table )
 	pass:setWinding("counterclockwise")
 	--pass:setWinding("clockwise")
 	
+	local SWrap = false
+	
 	for group_index = 1, groups_count do
 		local current_group = import_table[3][group_index]
 		
 		for surface_index = 1, current_group[2] do
+			SWrap = false
+			
 			local current_surface = import_table[4][surface_count + surface_index]
 			
 			local surface_vert_count = (current_surface[1] - 2) * 3
@@ -137,7 +177,6 @@ local function renderScene( pass, import_table )
 			-- It's the lowest level this has to be buffered for. Materials share the same textures some times
 			-- so its better to allow that at this level and allow for materials to be generated with it's
 			-- sampler setup to let us use the most of the graphics card if possible lol
-			--pass:setSampler( lovr.graphics.newSampler( testsampler_storage ) )
 			
 			pass:setCullMode("front")
 			
@@ -147,9 +186,7 @@ local function renderScene( pass, import_table )
 			
 			--{vert_count, flags_a, flags_b}
 			--textures = {texture, flags_a, flags_b, flags_c}
-			
 			pass:setSampler( sampler_SWrapTWrap )
-			local SWrap = false
 			
 			if ( bit.band(room_textures[ current_group[1] + 1 ][2], 1) == 1 ) then
 				pass:setSampler( sampler_SEdgeTWrap )
@@ -305,12 +342,16 @@ function generateMesh( blob_file, room_surfaces, address_mesh, address_table )
 					local blu = blob_file:getU8(temp_readpos + 2 + index)
 					local alp = blob_file:getU8(temp_readpos + 3 + index)
 					
-					red = red / 127.0
+					--if ( red < 0 or gre < 0 or blu < 0 or alp < 0 ) then
+					--	print("AAH", red, gre, blu, alp)
+					--end
+					
+					--
+					-- The binary is in bytes, let's store them this way and we can convert the color in the shader!
+					--[[red = red / 127.0
 					gre = gre / 127.0
 					blu = blu / 127.0
-					alp = alp / 127.0
-					
-					--print(red, gre, blu, alp)
+					alp = alp / 127.0]]
 					
 					-- SWEET! all the data is being read correctly!
 					-- Now we set element table to hold the values in the way that GL
@@ -467,7 +508,7 @@ local function do_area_portals( blob_file, room_count, block_rooms, block_areapo
 			local z = blob_file:getF32(file_index, 1)
 			file_index = file_index + 4
 			
-			print(x, y, z)
+			--print(x, y, z)
 			
 			--[[if (i > 2) then
 				vertex_position_color[] = vertex_position_color[j - 1]
@@ -481,7 +522,7 @@ local function do_area_portals( blob_file, room_count, block_rooms, block_areapo
 			end]]
 		end
 		
-		print("ap test", room_a, "||", room_b)
+		--print("ap test", room_a, "||", room_b)
 		
 		areaportals_level[areaportal_index] = {room_a, room_b, vert_count, areaportal_vertice_count}
 		
@@ -510,14 +551,14 @@ local function do_area_portals( blob_file, room_count, block_rooms, block_areapo
 		end
 		
 		if (portal_a_good) then
-			print("	ap:", areaportal_index, room_b)
+			--print("	ap:", areaportal_index, room_b)
 			
 			level_room_a_adjacent_rooms[room_a_adjacent_rooms] = room_b
 			room_a_adjacent_rooms = room_a_adjacent_rooms + 1
 		end
 		
 		if (portal_b_good) then
-			print("	ap:", areaportal_index, room_a)
+			--print("	ap:", areaportal_index, room_a)
 			
 			level_room_b_adjacent_rooms[room_b_adjacent_rooms] = room_a
 			room_b_adjacent_rooms = room_b_adjacent_rooms + 1
@@ -884,6 +925,11 @@ end
 ]]
 function ts.init()
 	print("(TIMESPLITTERS) hello world :)")
+	
+	sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "repeat"}, compare="none"})
+	sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "repeat"}, compare="none"})
+	sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "repeat"}, compare="none"})
+	sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "repeat"}, compare="none"})
 end
 
 --[[
