@@ -188,7 +188,7 @@ function lovr.load()
 			# 27 spaceways
 		-- \\\\\\\\\\\\\\\]]
 		
-		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
+		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level27.raw" )
 		
 		-- Eventually create a file system handler to load WADs, PAKs, etc.
 		-- Stride is from a struct usually.. So if we handle file this way where we can
@@ -332,10 +332,32 @@ function runExampleScene( pass )
 	pass:setMaterial( nil )
 end
 
+local fps_counter_realtime = 0
+local fps_counter_int = 0
+local fps_counter_remainder = 0
+
 -- We got pass:push and pass:pop!
 function lovr.draw(pass)
 	time_last = time_now
 	time_now = lovr.headset.getTime()
+	local delta = time_now - time_last
+	
+	-- This also provides us with the remaining time from the counter
+	-- Which is very important for latency
+	-- FPS COUNTER
+	fps_counter_realtime = fps_counter_realtime + delta
+	
+	fps_counter_int = fps_counter_int + 1
+	
+	if ( fps_counter_realtime > 1.0 ) then
+		fps_counter_remainder = fps_counter_realtime - 1.0
+		
+		--print( "FPS:", fps_counter_int, "  ---- ", fps_counter_remainder )
+		
+		fps_counter_realtime = 0
+		fps_counter_int = 0
+	end
+	-- FPS COUNTER
 	
 	local passes = {}
 	
@@ -361,8 +383,7 @@ function lovr.draw(pass)
 	
 	--scene:pop("state")
 	-- //////////////////////////////////////////////////////////////////////////////
-	
-	local delta = time_now - time_last
+	-- TODO: FIX FRAMERATE NORMALIZER lol, MAX FPS VARIES infact maybe use the calculated fps from the previous frame??
 	local delta_normal = delta / ( 1 / 90 )
 	
 	out_frametime = out_frametime + delta

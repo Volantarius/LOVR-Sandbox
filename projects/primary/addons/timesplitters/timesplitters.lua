@@ -1,4 +1,7 @@
---local ffi = require("ffi")
+--[[local ffi = require("ffi")
+local sdl = require("sdl")
+local gl = require("opengl")
+local GL = require("glsmall")]]
 
 local ts = {}
 
@@ -14,6 +17,11 @@ ts = require("addons/timesplitters/textures")
 	
 	PROBLEM I don't know if it is a great idea to setup something like that and interface it in runtime
 	Need to test before getting carried away with that.
+	
+	NOTE
+	
+	Weird thing I noticed for textures... If they are floats why are we not using the negative axis?
+	blue noise canceling helps too
 ]]
 
 local raw_shader_play_vert = [[
@@ -29,59 +37,70 @@ local raw_shader_play_vert = [[
 local raw_shader_play_frag = [[
 	// The texture to sample from.
 	
+	Constants {
+	// This constant will be set every draw to determine whether we are sampling horizontally or vertically.
+		int s_wrap;
+		int t_wrap;
+	};
+	
+	float hdr_scale = (1.0/0.75) * (1.0/0.75);
+	
 	// lovr's shader architecture will automatically supply a main(), which will call this lovrmain() function
 	vec4 lovrmain() {
-		//vec4 cool = (1.0 - Color) * (1.0 - Color) * getPixel(ColorTexture, UV);
+		// Okay so this is how we are going to have to impliment WRAPPING
+		vec2 new_uv = vec2( UV[0], UV[1] );
 		
-		//vec4 cool = Color * getPixel(ColorTexture, UV);
-		
-		//vec4 color_coord = getPixel(ColorTexture, UV);
-		vec4 color_coord = texture(sampler2D(ColorTexture, Sampler), UV);
-		
-		vec4 cool_color = (Color / 127.0);
-		
-		// Test of shader conversion instead of vertex conversion of byte
-		vec4 cool = (cool_color * cool_color) * color_coord;
-		//vec4 cool = (cool_color) * color_coord;
-		// 
-		// Maybe lower half is multiply and topper half is add
-		// 
-		
-		if ( cool_color[0] > 1.0 ) {
-			cool[0] = (Color[0] - 127.0) / 127.0;
-			
-			//cool[0] *= color_coord[0];
-			
-			cool[0] += cool_color[0];
-			
-			if (cool[0] > 1.0) {cool[0] = 1.0;}
-			if (cool[0] < 0.0) {cool[0] = 0.0;}
-		}
-		if ( cool_color[1] > 1.0 ) {
-			cool[1] = (Color[1] - 127.0) / 127.0;
-			
-			//cool[1] *= color_coord[1];
-			
-			cool[1] += cool_color[1];
-			
-			if (cool[1] > 1.0) {cool[1] = 1.0;}
-			if (cool[1] < 0.0) {cool[1] = 0.0;}
-		}
-		if ( cool_color[2] > 1.0 ) {
-			cool[2] = (Color[2] - 127.0) / 127.0;
-			
-			//cool[2] *= color_coord[2];
-			
-			cool[2] += cool_color[2];
-			
-			if (cool[2] > 1.0) {cool[2] = 1.0;}
-			if (cool[2] < 0.0) {cool[2] = 0.0;}
+		// My only good idea for how to recreate wrapping in this shader
+		// My guess is that the precision is much higher in higher GL versions
+		// Because the seam is apparent on older UV methods?
+		// 0.008 and 0.992 to shorten the sample distance on these modes
+		/*if ( (s_wrap & 1) == 1 ) {
+			//fract probably outputs negative
+			new_uv[0] = clamp(UV[0], 0.008, 0.992);
 		}
 		
-		//cool[3] = Color[3] / 127.0;
-		cool[3] = 1.0;
+		if ( (t_wrap & 1) == 1 ) {
+			new_uv[1] = clamp(UV[1], 0.008, 0.992);
+		}*/
 		
-		return cool;
+		vec4 original_color = Color / 127.0;
+		
+		original_color *= original_color;
+		
+		original_color = clamp(original_color, 0.0, 2.0);
+		
+		original_color[3] = 1.0;
+		
+		vec4 texture_color = getPixel(ColorTexture, new_uv);// HDR
+		
+		texture_color[3] = 1.0;
+		
+		vec4 modded_color = texture_color * original_color;
+		
+		// Over Intensity!
+		// Not completely sure if this is what the PS2 did or any way of
+		// easily implimenting HDR, but when we want to over saturate with light
+		// we have to swap from multiply to addition to add light instead of
+		// guiding the light with multiply
+		if ( original_color[0] > 1.0 ) {
+			modded_color[0] = texture_color[0] + original_color[0];
+		}
+		
+		if ( original_color[1] > 1.0 ) {
+			modded_color[1] = texture_color[1] + original_color[1];
+		}
+		
+		if ( original_color[2] > 1.0 ) {
+			modded_color[2] = texture_color[2] + original_color[2];
+		}
+		
+		//hdr_scale = sin(Time * 2.0) + 1.0;
+		
+		modded_color = clamp(modded_color * hdr_scale, 0.0, 1.0);
+		
+		modded_color[3] = 1.0;
+		
+		return modded_color;
 	}
 ]]
 
@@ -93,7 +112,7 @@ local raw_shader_play_frag = [[
 -- 
 -- Wavefront OBJ
 -- { x, y, z, [w] }
--- { u, [v, w] }
+-- { u, [v, w] }21
 -- { r, g, b, a }
 -- 
 -- local format = {
@@ -130,10 +149,10 @@ local raw_shader_play_frag = [[
 -- Anyway translated to GL terms as well
 --
 -- This may have a problem with creating more compare types... like use only one type for shadows and this has to be restarted when changed
-local sampler_SWrapTWrap = false
-local sampler_SWrapTEdge = false
-local sampler_SEdgeTWrap = false
-local sampler_SEdgeTEdge = false
+local sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "clamp"}, compare="gequal"})
+local sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "clamp"}, compare="gequal"})
+local sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "clamp"}, compare="gequal"})
+local sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "clamp"}, compare="gequal"})
 
 local room_textures = {}
 
@@ -141,8 +160,8 @@ local room_textures = {}
 local rooms_room = {}
 local rooms_info = {}
 
---local shader_playaround = lovr.graphics.newShader(raw_shader_play_vert, raw_shader_play_frag)
-local shader_playaround = lovr.graphics.newShader("unlit", raw_shader_play_frag)
+local shader_playaround = lovr.graphics.newShader(raw_shader_play_vert, raw_shader_play_frag)
+--local shader_playaround = lovr.graphics.newShader("unlit", raw_shader_play_frag)
 
 local function renderScene( pass, import_table )
 	local groups_count = import_table[1]
@@ -154,56 +173,56 @@ local function renderScene( pass, import_table )
 	pass:setWinding("counterclockwise")
 	--pass:setWinding("clockwise")
 	
-	local SWrap = false
+	local clampS = false
+	local clampT = false
 	
 	for group_index = 1, groups_count do
 		local current_group = import_table[3][group_index]
 		
-		for surface_index = 1, current_group[2] do
-			SWrap = false
+		-- ROOM_TEXTURES:
+		--		{texture, flags_a, flags_b, flags_c}
+		pass:setMaterial( room_textures[ current_group[1] + 1 ][1] )
+		
+		clampS = bit.band( room_textures[ current_group[1] + 1 ][2], 1 ) == 1
+		clampT = bit.band( room_textures[ current_group[1] + 1 ][3], 1 ) == 1
+		
+		if ( clampS and clampT ) then
+			pass:setSampler( sampler_SEdgeTEdge )
 			
+		elseif ( clampS and not clampT ) then
+			pass:setSampler( sampler_SEdgeTWrap )
+			
+		elseif ( not clampS and clampT ) then
+			pass:setSampler( sampler_SWrapTEdge )
+			
+		elseif ( not clampS and not clampT ) then
+			pass:setSampler( sampler_SWrapTWrap )
+			
+		else
+			pass:setSampler("linear")
+		end
+		
+		-- //\\ //\\
+		pass:send("s_wrap", room_textures[ current_group[1] + 1 ][2])
+		
+		pass:send("t_wrap", room_textures[ current_group[1] + 1 ][3])
+		-- \\//\\//
+		
+		for surface_index = 1, current_group[2] do
+			-- SURFACE:
+			--		{vert_count, flags_a, flags_b}
 			local current_surface = import_table[4][surface_count + surface_index]
 			
 			local surface_vert_count = (current_surface[1] - 2) * 3
 			
 			-- Material IDs are stored as indices for meshs starting from 1
 			-- Material IDs point to the table created for the room
-			--current_group[1]
-			--room_textures[ current_group[1] ]
-			
-			pass:setMaterial( room_textures[ current_group[1] + 1 ][1] )
-			
-			-- We need to create a sampler for each strip group
-			-- It's the lowest level this has to be buffered for. Materials share the same textures some times
-			-- so its better to allow that at this level and allow for materials to be generated with it's
-			-- sampler setup to let us use the most of the graphics card if possible lol
 			
 			pass:setCullMode("front")
 			
 			if ( bit.band(current_surface[3], 1) == 1 ) then
 				pass:setCullMode("back")
 			end
-			
-			--{vert_count, flags_a, flags_b}
-			--textures = {texture, flags_a, flags_b, flags_c}
-			pass:setSampler( sampler_SWrapTWrap )
-			
-			if ( bit.band(room_textures[ current_group[1] + 1 ][2], 1) == 1 ) then
-				pass:setSampler( sampler_SEdgeTWrap )
-				SWrap = true
-			end
-			
-			if ( bit.band(room_textures[ current_group[1] + 1 ][3], 1) == 1 ) then
-				
-				if ( SWrap ) then
-					pass:setSampler( sampler_SEdgeTEdge )
-				else
-					pass:setSampler( sampler_SWrapTEdge )
-				end
-				
-			end
-			
-			pass:setShader( shader_playaround )
 			
 			pass:mesh( import_table[5], lovr.math.mat4(), vertice_count, surface_vert_count, 1 )
 			
@@ -212,18 +231,22 @@ local function renderScene( pass, import_table )
 		
 		surface_count = surface_count + current_group[2]
 	end
-	
-	pass:setSampler( sampler_SWrapTWrap )
 end
 
 --{primary_group_size, secondary_group_size, mesh_groups, room_surfaces, mesh_buffer}
 
 function ts.renderScene( pass, import_table )
+	pass:setShader( shader_playaround )
+	
+	pass:setSampler( sampler_SWrapTWrap )
+	
 	for k = 1, #rooms_room do
 		
 		renderScene( pass, rooms_room[k] )
 		
 	end
+	
+	pass:setSampler("linear")
 end
 
 --[[
@@ -241,6 +264,7 @@ address_table
 function generateMesh( blob_file, room_surfaces, address_mesh, address_table )
 	local mesh_element = {}
 	
+		--
 	--local file_index = address_table[1][7]
 	local file_index = address_mesh * 1
 	
@@ -627,6 +651,8 @@ function ts.loadLevel( file )
 		
 		--print( "texture: ", texture_index, material_index )
 		
+		--print( "t	", texture_index, texture_flags_a, bit.band(texture_flags_a, 1), texture_flags_b, bit.band(texture_flags_b, 1) )
+		
 		-- Then we create a list of materials with all of the following flags
 		-- And texture name
 		
@@ -926,10 +952,10 @@ end
 function ts.init()
 	print("(TIMESPLITTERS) hello world :)")
 	
-	sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "repeat"}, compare="none"})
-	sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "repeat"}, compare="none"})
-	sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "repeat"}, compare="none"})
-	sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "repeat"}, compare="none"})
+	sampler_SWrapTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "repeat", "clamp"}, compare="gequal"})
+	sampler_SWrapTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"repeat", "clamp", "clamp"}, compare="gequal"})
+	sampler_SEdgeTWrap = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "repeat", "clamp"}, compare="gequal"})
+	sampler_SEdgeTEdge = lovr.graphics.newSampler({filter={"linear", "linear", "linear"}, wrap={"clamp", "clamp", "clamp"}, compare="gequal"})
 end
 
 --[[

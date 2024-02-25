@@ -117,7 +117,8 @@ local function createQ8( blob, offset, width, height, palette )
 			-- Finally we are using the palette_index offset and using the index from above
 			red, gre, blu, alp = blob:getU8(palette_index + index, 4)
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp / 127) * 2))
+			-- NOTE: setting over 1 will overflow! Alpha looks pretty wild overflowed
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ( (alp / 127) ))
 		end
 	end
 	
@@ -145,7 +146,7 @@ local function createQ6( blob, offset, width, height )
 			-- Read the 4 bytes into the variables
 			red, gre, blu, alp = blob:getU8(file_index + i, 4)
 			
-			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ((alp / 127) * 2))
+			aaa:setPixel(x, y, red / 255, gre / 255, blu / 255, ( (alp / 127) ))
 		end
 	end
 	
@@ -231,7 +232,8 @@ function ts.loadTexture( file, name )
 		
 	elseif ( header == "M8" ) then
 		
-		--
+		-- Skip premade ones for now, we are using ours which is linear!
+		texture = createQ8( blob_file, file_index, width, height, palette_size )
 		
 	else
 		--

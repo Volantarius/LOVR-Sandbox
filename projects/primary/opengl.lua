@@ -5,6 +5,9 @@ local gl
 
 if ( ffi.os == "Windows" ) then
 	gl = ffi.load("opengl32")
+else
+	-- MAC?
+	gl = ffi.load("libGL")
 end
 
 -- Various defines from glew.h
