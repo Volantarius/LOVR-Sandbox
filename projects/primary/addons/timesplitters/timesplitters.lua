@@ -35,33 +35,23 @@ local raw_shader_play_vert = [[
 ]]
 
 local raw_shader_play_frag = [[
-	// The texture to sample from.
-	
 	Constants {
-	// This constant will be set every draw to determine whether we are sampling horizontally or vertically.
 		int s_wrap;
 		int t_wrap;
 	};
 	
 	float hdr_scale = (1.0/0.75) * (1.0/0.75);
 	
-	// lovr's shader architecture will automatically supply a main(), which will call this lovrmain() function
 	vec4 lovrmain() {
-		// Okay so this is how we are going to have to impliment WRAPPING
-		vec2 new_uv = vec2( UV[0], UV[1] );
+		vec2 new_uv = UV.xy;
 		
-		// My only good idea for how to recreate wrapping in this shader
-		// My guess is that the precision is much higher in higher GL versions
-		// Because the seam is apparent on older UV methods?
-		// 0.008 and 0.992 to shorten the sample distance on these modes
-		/*if ( (s_wrap & 1) == 1 ) {
-			//fract probably outputs negative
-			new_uv[0] = clamp(UV[0], 0.008, 0.992);
+		if ( (s_wrap & 1) == 1 ) {
+			new_uv[0] = clamp( (UV[0] * 0.997) + 0.003, 0.003, 0.997);
 		}
 		
 		if ( (t_wrap & 1) == 1 ) {
-			new_uv[1] = clamp(UV[1], 0.008, 0.992);
-		}*/
+			new_uv[1] = clamp( (UV[1] * 0.997) + 0.003, 0.003, 0.997);
+		}
 		
 		vec4 original_color = Color / 127.0;
 		
@@ -71,7 +61,7 @@ local raw_shader_play_frag = [[
 		
 		original_color[3] = 1.0;
 		
-		vec4 texture_color = getPixel(ColorTexture, new_uv);// HDR
+		vec4 texture_color = getPixel(ColorTexture, new_uv);// Changed UV to support clamping
 		
 		texture_color[3] = 1.0;
 		
@@ -83,22 +73,32 @@ local raw_shader_play_frag = [[
 		// we have to swap from multiply to addition to add light instead of
 		// guiding the light with multiply
 		if ( original_color[0] > 1.0 ) {
-			modded_color[0] = texture_color[0] + original_color[0];
+			modded_color[0] = texture_color[0] + (original_color[0] - 1.0);
 		}
 		
 		if ( original_color[1] > 1.0 ) {
-			modded_color[1] = texture_color[1] + original_color[1];
+			modded_color[1] = texture_color[1] + (original_color[1] - 1.0);
 		}
 		
 		if ( original_color[2] > 1.0 ) {
-			modded_color[2] = texture_color[2] + original_color[2];
+			modded_color[2] = texture_color[2] + (original_color[2] - 1.0);
 		}
 		
-		//hdr_scale = sin(Time * 2.0) + 1.0;
+		hdr_scale = sin(Time * 2.0) + 1.0;
 		
 		modded_color = clamp(modded_color * hdr_scale, 0.0, 1.0);
 		
 		modded_color[3] = 1.0;
+		
+		//modded_color.xyz = 0.5 - ( Normal.xyz );
+		modded_color.xyz = Normal.xyz;
+		
+		modded_color.x = clamp(modded_color.x * 1, 0.0, 1.0);
+		modded_color.y = clamp(modded_color.y * 0, 0.0, 1.0);
+		modded_color.z = clamp(modded_color.z * 0, 0.0, 1.0);
+		
+		modded_color.x *= modded_color.x;
+		modded_color.z *= modded_color.z;
 		
 		return modded_color;
 	}
@@ -186,7 +186,7 @@ local function renderScene( pass, import_table )
 		clampS = bit.band( room_textures[ current_group[1] + 1 ][2], 1 ) == 1
 		clampT = bit.band( room_textures[ current_group[1] + 1 ][3], 1 ) == 1
 		
-		if ( clampS and clampT ) then
+		--[[if ( clampS and clampT ) then
 			pass:setSampler( sampler_SEdgeTEdge )
 			
 		elseif ( clampS and not clampT ) then
@@ -195,12 +195,10 @@ local function renderScene( pass, import_table )
 		elseif ( not clampS and clampT ) then
 			pass:setSampler( sampler_SWrapTEdge )
 			
-		elseif ( not clampS and not clampT ) then
-			pass:setSampler( sampler_SWrapTWrap )
-			
+		--elseif ( not clampS and not clampT ) then
 		else
-			pass:setSampler("linear")
-		end
+			pass:setSampler( sampler_SWrapTWrap )
+		end]]
 		
 		-- //\\ //\\
 		pass:send("s_wrap", room_textures[ current_group[1] + 1 ][2])
@@ -245,8 +243,6 @@ function ts.renderScene( pass, import_table )
 		renderScene( pass, rooms_room[k] )
 		
 	end
-	
-	pass:setSampler("linear")
 end
 
 --[[
@@ -346,7 +342,50 @@ function generateMesh( blob_file, room_surfaces, address_mesh, address_table )
 					local position_y = blob_file:getF32(temp_readpos + 4 + index, 1)
 					local position_z = blob_file:getF32(temp_readpos + 8 + index, 1)
 					
-					--print(position_x, position_y, position_z)
+					-- TODO: Make this the current vertice and the last
+					-- Cross the two to get a tangent
+					
+					local vec_normal = vec3(1, 1, 0)
+					
+					-- TODO: If last vertice exists we can calculate the normal of the geometry
+					if ( vert_index > 2 ) then
+						local b = mesh_element[new_vert_index - 1]
+						local a = mesh_element[new_vert_index - 2]
+						
+						local vec_a = vec3(position_x, position_y, position_z)
+						
+						local vec_b = vec3(b[1], b[2], b[3])
+						local vec_c = vec3(a[1], a[2], a[3])
+						
+						local odd_order = 0
+						if ( bit.band(strip[3], 1) == 1 ) then odd_order = 1 end
+						
+						local mod_i, mod_f = math.modf(vert_index, 1)
+						
+						local part_a = vec_b - vec_a
+						part_a:normalize()
+						
+						local part_b = vec_c - vec_a
+						part_a:normalize()
+						
+						if ( mod_i == odd_order ) then
+							vec_normal = ( part_a ):cross( part_b )
+						else
+							vec_normal = ( part_b ):cross( part_a )
+						end
+						
+						vec_normal:normalize()
+						
+						if ( vert_index == 3 ) then
+							mesh_element[new_vert_index - 1][4] = vec_normal[1]
+							mesh_element[new_vert_index - 1][5] = vec_normal[2]
+							mesh_element[new_vert_index - 1][6] = vec_normal[3]
+							
+							mesh_element[new_vert_index - 2][4] = vec_normal[1]
+							mesh_element[new_vert_index - 2][5] = vec_normal[2]
+							mesh_element[new_vert_index - 2][6] = vec_normal[3]
+						end
+					end
 					
 					-- Now read the UVs with a stride of 16
 					index = math.floor(base_test * 16)-- 4 * 4
@@ -355,7 +394,11 @@ function generateMesh( blob_file, room_surfaces, address_mesh, address_table )
 					local uv_x = blob_file:getF32(temp_readpos + 0 + index, 1)
 					local uv_y = blob_file:getF32(temp_readpos + 4 + index, 1)
 					
-					--print(uv_x, uv_y)
+					--[[clampS = bit.band( room_textures[ group_info[1] + 1 ][2], 1 ) == 1
+					clampT = bit.band( room_textures[ group_info[1] + 1 ][3], 1 ) == 1
+					]]
+					
+					--print(uv_x, uv_y, clampS, clampT)
 					
 					-- Now colors
 					index = math.floor(base_test * 4)
@@ -379,7 +422,8 @@ function generateMesh( blob_file, room_surfaces, address_mesh, address_table )
 					
 					-- SWEET! all the data is being read correctly!
 					-- Now we set element table to hold the values in the way that GL
-					mesh_element[new_vert_index] = { position_x, position_y, position_z, 0, 1, 0, uv_x, uv_y, red, gre, blu, alp }
+					--mesh_element[new_vert_index] = { position_x, position_y, position_z, 0, 1, 0, uv_x, uv_y, red, gre, blu, alp }
+					mesh_element[new_vert_index] = { position_x, position_y, position_z, vec_normal[1], vec_normal[2], vec_normal[3], uv_x, uv_y, red, gre, blu, alp }
 					
 					new_vert_index = new_vert_index + 1
 				end
@@ -661,7 +705,7 @@ function ts.loadLevel( file )
 		room_textures[material_index] = {texture_image, texture_flags_a, texture_flags_b, texture_flags_c}
 	end
 	
-	for room_index = 1, (room_count - 1) do rooms_room[room_index] = {} end
+	--for room_index = 1, (room_count - 1) do rooms_room[room_index] = {} end
 	
 	print("ROOMS:", room_count)
 	
@@ -780,6 +824,7 @@ function ts.loadLevel( file )
 		
 		-- TODO: Has to be in this scope, need to change
 		local primary_surfaces = get_strips( blob_file, primary_strip_size, primary_strips )
+		--local primary_surfaces = get_strips( blob_file, secondary_strip_size, secondary_strips )
 		
 		-- TODO: Secondary Strips
 		
@@ -850,15 +895,54 @@ function ts.loadLevel( file )
 					--new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
 					--new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 2 ]
 					
+					local vec_normal = vec3(0, 1, 0)
+					
+					local index_a = 0
+					local index_b = 0
+					local index_c = 0
+					
 					if ( bit.band(vert_index, 1) == 1 ) then
-						new_mesh_data[ triangle_offset + 1 ] = mesh_data[ fixed_index + 2 ]
-						new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
-						new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 0 ]
+						index_a = mesh_data[ fixed_index + 2 ]
+						index_b = mesh_data[ fixed_index + 1 ]
+						index_c = mesh_data[ fixed_index + 0 ]
 					else
-						new_mesh_data[ triangle_offset + 1 ] = mesh_data[ fixed_index + 0 ]
-						new_mesh_data[ triangle_offset + 2 ] = mesh_data[ fixed_index + 1 ]
-						new_mesh_data[ triangle_offset + 3 ] = mesh_data[ fixed_index + 2 ]
+						index_a = mesh_data[ fixed_index + 0 ]
+						index_b = mesh_data[ fixed_index + 1 ]
+						index_c = mesh_data[ fixed_index + 2 ]
 					end
+					
+					local odd_order = 1 - bit.band(strip[3], 1)
+					--local odd_order = bit.band(strip[3], 1)
+					
+					local vec_a = vec3(index_a[1], index_a[2], index_a[3])
+					local vec_c = vec3(index_b[1], index_b[2], index_b[3])
+					local vec_b = vec3(index_c[1], index_c[2], index_c[3])
+					
+					if ( bit.band(strip[3], 1) == 1 ) then
+						vec_normal = (vec_b - vec_a):cross( vec_c - vec_a )
+						--vec_normal[3] = 0.0
+					else
+						--vec_normal = (vec_b - vec_c):cross( vec_a - vec_c )
+						--vec_normal = vec3(0, 0, 1)
+					end
+					
+					vec_normal:normalize()
+					
+					--[[index_a[4] = vec_normal[1]
+					index_a[5] = vec_normal[2]
+					index_a[6] = vec_normal[3]
+					
+					index_b[4] = vec_normal[1]
+					index_b[5] = vec_normal[2]
+					index_b[6] = vec_normal[3]
+					
+					index_c[4] = vec_normal[1]
+					index_c[5] = vec_normal[2]
+					index_c[6] = vec_normal[3]
+					]]
+					new_mesh_data[ triangle_offset + 1 ] = index_a
+					new_mesh_data[ triangle_offset + 2 ] = index_b
+					new_mesh_data[ triangle_offset + 3 ] = index_c
 					
 					new_vert_index = new_vert_index + 1
 					

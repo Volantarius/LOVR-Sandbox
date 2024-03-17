@@ -188,7 +188,7 @@ function lovr.load()
 			# 27 spaceways
 		-- \\\\\\\\\\\\\\\]]
 		
-		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level27.raw" )
+		import_table = ts_table.loadLevel( "addons/timesplitters/levels/level11.raw" )
 		
 		-- Eventually create a file system handler to load WADs, PAKs, etc.
 		-- Stride is from a struct usually.. So if we handle file this way where we can
@@ -338,6 +338,8 @@ local fps_counter_remainder = 0
 
 -- We got pass:push and pass:pop!
 function lovr.draw(pass)
+	pass:setSampler("linear")
+	
 	time_last = time_now
 	time_now = lovr.headset.getTime()
 	local delta = time_now - time_last
